@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+	"github.com/vitalii/hotword/pkg/model"
 )
 
 func TestVerifyCommand(t *testing.T) {
@@ -21,16 +23,28 @@ func TestVerifyCommand(t *testing.T) {
 }
 
 func TestVerifyExecution(t *testing.T) {
+	tmpDir, cleanup := createDummyData(t)
+	defer cleanup()
+
+	// Create a dummy model
+	modelFile := filepath.Join(tmpDir, "model.bin")
+	weights := model.NewTensor([]int{1, 2440})
+	bias := []float32{0.0}
+	model.SaveModel(modelFile, weights, bias)
+
 	root := NewRootCmd()
 	verify := NewVerifyCmd()
 	root.AddCommand(verify)
 
-	output, err := executeCommand(root, "verify", "--model", "test.bin", "--data", "test_data")
+	output, err := executeCommand(root, "verify", "--model", modelFile, "--data", tmpDir)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	if !strings.Contains(output, "Verifying model test.bin against data in test_data") {
+	if !strings.Contains(output, "Loading model from") {
 		t.Errorf("Expected verification message, got: %s", output)
+	}
+	if !strings.Contains(output, "Accuracy:") {
+		t.Errorf("Expected accuracy report, got: %s", output)
 	}
 }
