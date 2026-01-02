@@ -143,3 +143,56 @@ func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (
 
 	return gradInput, gradWeights, gradBias
 }
+
+// ReLUBackward calculates the gradient for the ReLU activation.
+func ReLUBackward(input, gradOutput *Tensor) *Tensor {
+	gradInput := NewTensor(input.Shape)
+	for i, val := range input.Data {
+		if val > 0 {
+			gradInput.Data[i] = gradOutput.Data[i]
+		} else {
+			gradInput.Data[i] = 0
+		}
+	}
+	return gradInput
+}
+
+// MaxPool2DBackward calculates the gradient for the MaxPool2D layer.
+// Note: This implementation re-finds the maximum values.
+func MaxPool2DBackward(input, gradOutput *Tensor, kernelSize, stride int) *Tensor {
+	channels := input.Shape[0]
+
+	outHeight := gradOutput.Shape[1]
+	outWidth := gradOutput.Shape[2]
+
+	gradInput := NewTensor(input.Shape)
+
+	for c := 0; c < channels; c++ {
+		for i := 0; i < outHeight; i++ {
+			for j := 0; j < outWidth; j++ {
+				var maxVal float32 = -3.402823466e+38
+				maxIdx := []int{0, 0}
+
+				for ki := 0; ki < kernelSize; ki++ {
+					for kj := 0; kj < kernelSize; kj++ {
+						ii := i*stride + ki
+						jj := j*stride + kj
+
+						val := input.Get([]int{c, ii, jj})
+						if val > maxVal {
+							maxVal = val
+							maxIdx[0] = ii
+							maxIdx[1] = jj
+						}
+					}
+				}
+				
+				// Update gradInput at the maxIdx
+				flatIdx := gradInput.getIndex([]int{c, maxIdx[0], maxIdx[1]})
+				gradInput.Data[flatIdx] += gradOutput.Get([]int{c, i, j})
+			}
+		}
+	}
+
+	return gradInput
+}
