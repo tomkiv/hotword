@@ -10,7 +10,7 @@ func Conv2D(input, weights *Tensor, bias []float32, stride, padding int) *Tensor
 	inWidth := input.Shape[2]
 
 	numFilters := weights.Shape[0]
-	kernelHeight := weights.Shape[2]
+	kernelHeight := weights.Shape[2]	
 	kernelWidth := weights.Shape[3]
 
 	outHeight := (inHeight+2*padding-kernelHeight)/stride + 1
@@ -112,4 +112,34 @@ func Dense(input, weights *Tensor, bias []float32) *Tensor {
 	}
 
 	return output
+}
+
+// DenseBackward calculates the gradients for the Dense layer.
+// input: [input_size]
+// weights: [num_outputs, input_size]
+// bias: [num_outputs]
+// gradOutput: [num_outputs]
+// Returns: gradInput [input_size], gradWeights [num_outputs, input_size], gradBias [num_outputs]
+func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
+	numOutputs := weights.Shape[0]
+	inputSize := weights.Shape[1]
+
+	gradInput := NewTensor(input.Shape)
+	gradWeights := NewTensor(weights.Shape)
+	gradBias := make([]float32, numOutputs)
+
+	for i := 0; i < numOutputs; i++ {
+		goi := gradOutput.Data[i]
+		gradBias[i] = goi
+
+		for j := 0; j < inputSize; j++ {
+			// gradWeights = gradOutput * input^T
+			gradWeights.Set([]int{i, j}, goi*input.Data[j])
+
+			// gradInput = W^T * gradOutput
+			gradInput.Data[j] += weights.Get([]int{i, j}) * goi
+		}
+	}
+
+	return gradInput, gradWeights, gradBias
 }
