@@ -1,0 +1,1 @@
+{\n  "track_id": "cli_connect_20260101",\n  "type": "feature",\n  "status": "new",\n  "created_at": "2026-01-01T18:30:00Z",\n  "updated_at": "2026-01-01T18:30:00Z",\n  "description": "Connect command lines to actual implementation for training and verification"\n}
