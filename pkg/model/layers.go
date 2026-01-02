@@ -72,7 +72,7 @@ func MaxPool2D(input *Tensor, kernelSize, stride int) *Tensor {
 	for c := 0; c < channels; c++ {
 		for i := 0; i < outHeight; i++ {
 			for j := 0; j < outWidth; j++ {
-				var maxVal float32 = -3.402823466e+38 // math.SmallestNonzeroFloat32 is positive, using float32 min
+				var maxVal float32 = -3.402823466e+38 // float32 min
 				
 				for ki := 0; ki < kernelSize; ki++ {
 					for kj := 0; kj < kernelSize; kj++ {
@@ -88,6 +88,27 @@ func MaxPool2D(input *Tensor, kernelSize, stride int) *Tensor {
 				output.Set([]int{c, i, j}, maxVal)
 			}
 		}
+	}
+
+	return output
+}
+
+// Dense performs a fully connected (dense) layer operation.
+// input: any shape (will be flattened)
+// weights: [output_units, input_size]
+// bias: [output_units]
+func Dense(input, weights *Tensor, bias []float32) *Tensor {
+	numOutputs := weights.Shape[0]
+	inputSize := len(input.Data)
+
+	output := NewTensor([]int{numOutputs})
+
+	for i := 0; i < numOutputs; i++ {
+		var sum float32
+		for j := 0; j < inputSize; j++ {
+			sum += input.Data[j] * weights.Get([]int{i, j})
+		}
+		output.Data[i] = sum + bias[i]
 	}
 
 	return output
