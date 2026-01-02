@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"github.com/vitalii/hotword/pkg/model"
 )
 
