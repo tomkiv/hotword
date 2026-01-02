@@ -13,9 +13,12 @@ func NewVerifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "verify",
 		Short: "Verify a trained hotword model",
-		Long:  `Verify a trained hotword model against a labeled dataset of WAV samples.`, 
+		Long:  `Verify a trained hotword model against a labeled dataset of WAV samples.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.Printf("Verifying model %s against data in %s\n", verifyModelFile, verifyDataDir)
+			modelFile := viper.GetString("verify.model")
+			dataDir := viper.GetString("verify.data")
+
+			cmd.Printf("Verifying model %s against data in %s\n", modelFile, dataDir)
 			// This will be connected to pkg/model.LoadModel and pkg/engine.Engine in the future
 			return nil
 		},
@@ -29,7 +32,6 @@ func NewVerifyCmd() *cobra.Command {
 
 	return cmd
 }
-
 var verifyCmd = NewVerifyCmd()
 
 func init() {

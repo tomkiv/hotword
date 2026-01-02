@@ -17,8 +17,13 @@ func NewTrainCmd() *cobra.Command {
 		Short: "Train a hotword detection model",
 		Long:  `Train a hotword detection model from WAV samples in hotword and background directories.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.Printf("Training model with data from %s, output to %s\n", trainDataDir, trainModelOut)
-			cmd.Printf("Epochs: %d, LR: %f\n", trainEpochs, trainLR)
+			data := viper.GetString("train.data")
+			out := viper.GetString("train.out")
+			epochs := viper.GetInt("train.epochs")
+			lr := viper.GetFloat64("train.lr")
+
+			cmd.Printf("Training model with data from %s, output to %s\n", data, out)
+			cmd.Printf("Epochs: %d, LR: %f\n", epochs, lr)
 			return nil
 		},
 	}
