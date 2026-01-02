@@ -157,6 +157,55 @@ func ReLUBackward(input, gradOutput *Tensor) *Tensor {
 	return gradInput
 }
 
+// Conv2DBackward calculates the gradients for the Conv2D layer.
+func Conv2DBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor, stride, padding int) (*Tensor, *Tensor, []float32) {
+	inChannels := input.Shape[0]
+	inHeight := input.Shape[1]
+	inWidth := input.Shape[2]
+
+	numFilters := weights.Shape[0]
+	kernelHeight := weights.Shape[2]
+	kernelWidth := weights.Shape[3]
+
+	outHeight := gradOutput.Shape[1]
+	outWidth := gradOutput.Shape[2]
+
+	gradInput := NewTensor(input.Shape)
+	gradWeights := NewTensor(weights.Shape)
+	gradBias := make([]float32, numFilters)
+
+	for f := 0; f < numFilters; f++ {
+		for i := 0; i < outHeight; i++ {
+			for j := 0; j < outWidth; j++ {
+				goVal := gradOutput.Get([]int{f, i, j})
+				
+				// gradBias = sum(gradOutput)
+				gradBias[f] += goVal
+
+				for c := 0; c < inChannels; c++ {
+					for ki := 0; ki < kernelHeight; ki++ {
+						for kj := 0; kj < kernelWidth; kj++ {
+							ii := i*stride - padding + ki
+							jj := j*stride - padding + kj
+
+							if ii >= 0 && ii < inHeight && jj >= 0 && jj < inWidth {
+								// gradWeights = conv(input, gradOutput)
+								inVal := input.Get([]int{c, ii, jj})
+								gradWeights.Data[gradWeights.getIndex([]int{f, c, ki, kj})] += inVal * goVal
+
+								// gradInput = conv_transpose(gradOutput, weights)
+								wVal := weights.Get([]int{f, c, ki, kj})
+								gradInput.Data[gradInput.getIndex([]int{c, ii, jj})] += wVal * goVal
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return gradInput, gradWeights, gradBias
+}
 // MaxPool2DBackward calculates the gradient for the MaxPool2D layer.
 // Note: This implementation re-finds the maximum values.
 func MaxPool2DBackward(input, gradOutput *Tensor, kernelSize, stride int) *Tensor {
