@@ -1,8 +1,14 @@
 package cmd
 
 import (
+	"fmt"
+	"path/filepath"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/vitalii/hotword/pkg/features"
+	"github.com/vitalii/hotword/pkg/model"
+	"github.com/vitalii/hotword/pkg/train"
 )
 
 var trainDataDir string
@@ -20,10 +26,55 @@ func NewTrainCmd() *cobra.Command {
 			data := viper.GetString("train.data")
 			out := viper.GetString("train.out")
 			epochs := viper.GetInt("train.epochs")
-			lr := viper.GetFloat64("train.lr")
+			lr := float32(viper.GetFloat64("train.lr"))
 
-			cmd.Printf("Training model with data from %s, output to %s\n", data, out)
-			cmd.Printf("Epochs: %d, LR: %f\n", epochs, lr)
+			sampleRate := 16000
+			windowSize := 512
+			hopSize := 256
+			numMelFilters := 40
+
+			cmd.Printf("Loading dataset from %s...\n", data)
+			hotwordDir := filepath.Join(data, "hotword")
+			backgroundDir := filepath.Join(data, "background")
+			
+			ds, err := train.LoadDataset(hotwordDir, backgroundDir)
+			if err != nil {
+				return fmt.Errorf("failed to load dataset: %w", err)
+			}
+
+			if len(ds.Samples) == 0 {
+				return fmt.Errorf("no samples found in dataset")
+			}
+
+			// Define feature extractor
+			extractor := func(samples []float32) *model.Tensor {
+				return features.Extract(samples, sampleRate, windowSize, hopSize, numMelFilters)
+			}
+
+			// Initialize model weights (assume 1 second samples for sizing)
+			// (16000 - 512) / 256 + 1 = 61 frames
+			// 61 * 40 = 2440
+			// Use the first sample to determine size dynamically
+			firstFeatures := extractor(ds.Samples[0].Audio)
+			inputSize := len(firstFeatures.Data)
+			
+			weights := model.NewTensor([]int{1, inputSize})
+			for i := range weights.Data {
+				weights.Data[i] = 0.01 // Simple init
+			}
+			bias := make([]float32, 1)
+
+			trainer := train.NewTrainer(weights, bias, lr)
+			
+			cmd.Printf("Starting training for %d epochs (LR: %f)...\n", epochs, lr)
+			trainer.Train(ds, epochs, extractor)
+
+			cmd.Printf("Saving model to %s...\n", out)
+			if err := model.SaveModel(out, weights, bias); err != nil {
+				return fmt.Errorf("failed to save model: %w", err)
+			}
+
+			cmd.Println("Training complete!")
 			return nil
 		},
 	}

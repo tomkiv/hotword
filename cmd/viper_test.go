@@ -7,12 +7,15 @@ import (
 )
 
 func TestViperBinding(t *testing.T) {
+	tmpDir, cleanup := createDummyData(t)
+	defer cleanup()
+
 	root := NewRootCmd()
 	train := NewTrainCmd()
 	root.AddCommand(train)
 
 	// Set args to override defaults
-	root.SetArgs([]string{"train", "--epochs", "99", "--lr", "0.123"})
+	root.SetArgs([]string{"train", "--data", tmpDir, "--epochs", "99", "--lr", "0.123"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
