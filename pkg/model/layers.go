@@ -99,13 +99,18 @@ func MaxPool2D(input *Tensor, kernelSize, stride int) *Tensor {
 // bias: [output_units]
 func Dense(input, weights *Tensor, bias []float32) *Tensor {
 	numOutputs := weights.Shape[0]
-	inputSize := len(input.Data)
+	expectedInputSize := weights.Shape[1]
+	actualInputSize := len(input.Data)
+
+	if actualInputSize != expectedInputSize {
+		panic("Dense layer: input size mismatch")
+	}
 
 	output := NewTensor([]int{numOutputs})
 
 	for i := 0; i < numOutputs; i++ {
 		var sum float32
-		for j := 0; j < inputSize; j++ {
+		for j := 0; j < expectedInputSize; j++ {
 			sum += input.Data[j] * weights.Get([]int{i, j})
 		}
 		output.Data[i] = sum + bias[i]
@@ -122,7 +127,12 @@ func Dense(input, weights *Tensor, bias []float32) *Tensor {
 // Returns: gradInput [input_size], gradWeights [num_outputs, input_size], gradBias [num_outputs]
 func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	numOutputs := weights.Shape[0]
-	inputSize := weights.Shape[1]
+	expectedInputSize := weights.Shape[1]
+	actualInputSize := len(input.Data)
+
+	if actualInputSize != expectedInputSize {
+		panic("DenseBackward: input size mismatch")
+	}
 
 	gradInput := NewTensor(input.Shape)
 	gradWeights := NewTensor(weights.Shape)
@@ -132,7 +142,7 @@ func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (
 		goi := gradOutput.Data[i]
 		gradBias[i] = goi
 
-		for j := 0; j < inputSize; j++ {
+		for j := 0; j < expectedInputSize; j++ {
 			// gradWeights = gradOutput * input^T
 			gradWeights.Set([]int{i, j}, goi*input.Data[j])
 

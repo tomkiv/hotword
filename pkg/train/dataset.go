@@ -19,18 +19,21 @@ type Dataset struct {
 }
 
 // LoadDataset loads WAV files from the hotword and background directories.
+// It normalizes all samples to a fixed length (16000 samples / 1 second).
 func LoadDataset(hotwordDir, backgroundDir string) (*Dataset, error) {
 	ds := &Dataset{}
 
+	const targetLength = 16000 // 1 second at 16kHz
+
 	// Load hotwords
-	hotSamples, err := loadFromDir(hotwordDir, true)
+	hotSamples, err := loadFromDir(hotwordDir, true, targetLength)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hotwords: %w", err)
 	}
 	ds.Samples = append(ds.Samples, hotSamples...)
 
 	// Load background
-	bgSamples, err := loadFromDir(backgroundDir, false)
+	bgSamples, err := loadFromDir(backgroundDir, false, targetLength)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load background: %w", err)
 	}
@@ -39,7 +42,7 @@ func LoadDataset(hotwordDir, backgroundDir string) (*Dataset, error) {
 	return ds, nil
 }
 
-func loadFromDir(dir string, isHotword bool) ([]Sample, error) {
+func loadFromDir(dir string, isHotword bool, targetLength int) ([]Sample, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -57,12 +60,15 @@ func loadFromDir(dir string, isHotword bool) ([]Sample, error) {
 			audioData, _, err := audio.LoadWAV(file)
 			file.Close()
 			if err != nil {
-				// Log warning and skip?
 				continue
 			}
 
+			// Normalize length
+			normalized := make([]float32, targetLength)
+			copy(normalized, audioData)
+
 			samples = append(samples, Sample{
-				Audio:     audioData,
+				Audio:     normalized,
 				IsHotword: isHotword,
 			})
 		}
