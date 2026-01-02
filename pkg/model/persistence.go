@@ -70,3 +70,69 @@ func SaveModel(path string, weights *Tensor, bias []float32) error {
 
 	return SaveModelToWriter(f, weights, bias)
 }
+
+// LoadModelFromReader restores weights and biases from an io.Reader.
+func LoadModelFromReader(r io.Reader) (*Tensor, []float32, error) {
+	// 1. Magic Bytes
+	magic := make([]byte, 4)
+	if _, err := io.ReadFull(r, magic); err != nil {
+		return nil, nil, fmt.Errorf("failed to read magic bytes: %w", err)
+	}
+	if string(magic) != MagicBytes {
+		return nil, nil, fmt.Errorf("invalid model file format: wrong magic bytes")
+	}
+
+	// 2. Version
+	var version uint16
+	if err := binary.Read(r, binary.LittleEndian, &version); err != nil {
+		return nil, nil, fmt.Errorf("failed to read version: %w", err)
+	}
+	if version != Version {
+		return nil, nil, fmt.Errorf("unsupported model version: %d", version)
+	}
+
+	// 3. Metadata
+	var numRows, numCols, numBias uint32
+	if err := binary.Read(r, binary.LittleEndian, &numRows); err != nil {
+		return nil, nil, fmt.Errorf("failed to read numRows: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &numCols); err != nil {
+		return nil, nil, fmt.Errorf("failed to read numCols: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &numBias); err != nil {
+		return nil, nil, fmt.Errorf("failed to read numBias: %w", err)
+	}
+
+	// 4. Weights Data
+	weights := NewTensor([]int{int(numRows), int(numCols)})
+	for i := range weights.Data {
+		var val float32
+		if err := binary.Read(r, binary.LittleEndian, &val); err != nil {
+			return nil, nil, fmt.Errorf("failed to read weight at index %d: %w", i, err)
+		}
+		weights.Data[i] = val
+	}
+
+	// 5. Bias Data
+	bias := make([]float32, numBias)
+	for i := range bias {
+		var val float32
+		if err := binary.Read(r, binary.LittleEndian, &val); err != nil {
+			return nil, nil, fmt.Errorf("failed to read bias at index %d: %w", i, err)
+		}
+		bias[i] = val
+	}
+
+	return weights, bias, nil
+}
+
+// LoadModel loads the model weights and biases from a file.
+func LoadModel(path string) (*Tensor, []float32, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open model file: %w", err)
+	}
+	defer f.Close()
+
+	return LoadModelFromReader(f)
+}

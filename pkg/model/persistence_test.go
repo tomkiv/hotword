@@ -61,3 +61,56 @@ func TestSaveModel(t *testing.T) {
 		}
 	})
 }
+
+func TestLoadModel(t *testing.T) {
+	t.Run("Valid Load", func(t *testing.T) {
+		weights := NewTensor([]int{2, 2})
+		weights.Data = []float32{1.0, 2.0, 3.0, 4.0}
+		bias := []float32{0.5, -0.5}
+
+		buf := new(bytes.Buffer)
+		SaveModelToWriter(buf, weights, bias)
+
+		loadedWeights, loadedBias, err := LoadModelFromReader(buf)
+		if err != nil {
+			t.Fatalf("Failed to load model: %v", err)
+		}
+
+		if loadedWeights.Shape[0] != 2 || loadedWeights.Shape[1] != 2 {
+			t.Errorf("Expected shape [2, 2], got %v", loadedWeights.Shape)
+		}
+		if loadedWeights.Data[0] != 1.0 || loadedWeights.Data[3] != 4.0 {
+			t.Error("Weights data mismatch")
+		}
+		if len(loadedBias) != 2 || loadedBias[0] != 0.5 {
+			t.Error("Bias data mismatch")
+		}
+	})
+
+	t.Run("Invalid Magic Bytes", func(t *testing.T) {
+		buf := bytes.NewReader([]byte("NOTAMODEL"))
+		_, _, err := LoadModelFromReader(buf)
+		if err == nil {
+			t.Error("Expected error for invalid magic bytes")
+		}
+	})
+
+	t.Run("Load Model from File", func(t *testing.T) {
+		weights := NewTensor([]int{1, 1})
+		weights.Data[0] = 99.0
+		bias := []float32{1.1}
+
+		tmpFile := "/Users/vitalii/.gemini/tmp/4ea7f44ea8ed39b191b36db796e7cfa745b89b5eb30827822379ef6ae57a83d0/model_load.bin"
+		SaveModel(tmpFile, weights, bias)
+		defer os.Remove(tmpFile)
+
+		lw, lb, err := LoadModel(tmpFile)
+		if err != nil {
+			t.Fatalf("Failed to load model: %v", err)
+		}
+
+		if lw.Data[0] != 99.0 || lb[0] != 1.1 {
+			t.Error("Loaded data mismatch")
+		}
+	})
+}
