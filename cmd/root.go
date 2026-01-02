@@ -17,6 +17,8 @@ func NewRootCmd() *cobra.Command {
 		Long:  `A minimalist hotword detection tool in Go that supports training from WAV samples and real-time inference.`,
 	}
 
+	cobra.OnInitialize(initConfig)
+
 	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	
 	return cmd
