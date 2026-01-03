@@ -4,10 +4,168 @@ import (
 	"math"
 )
 
+// Conv2DLayer represents a 2D convolutional layer.
+type Conv2DLayer struct {
+	Weights *Tensor
+	Bias    []float32
+	Stride  int
+	Padding int
+}
+
+func NewConv2DLayer(weights *Tensor, bias []float32, stride, padding int) *Conv2DLayer {
+	return &Conv2DLayer{
+		Weights: weights,
+		Bias:    bias,
+		Stride:  stride,
+		Padding: padding,
+	}
+}
+
+func (l *Conv2DLayer) Forward(input *Tensor) *Tensor {
+	return Conv2D(input, l.Weights, l.Bias, l.Stride, l.Padding)
+}
+
+func (l *Conv2DLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
+	return Conv2DBackward(input, l.Weights, l.Bias, gradOutput, l.Stride, l.Padding)
+}
+
+func (l *Conv2DLayer) Params() (*Tensor, []float32) {
+	return l.Weights, l.Bias
+}
+
+func (l *Conv2DLayer) SetParams(weights *Tensor, bias []float32) {
+	l.Weights = weights
+	l.Bias = bias
+}
+
+func (l *Conv2DLayer) Type() string {
+	return "conv2d"
+}
+
+// ReLULayer represents a Rectified Linear Unit activation layer.
+type ReLULayer struct{}
+
+func NewReLULayer() *ReLULayer {
+	return &ReLULayer{}
+}
+
+func (l *ReLULayer) Forward(input *Tensor) *Tensor {
+	return ReLU(input)
+}
+
+func (l *ReLULayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
+	return ReLUBackward(input, gradOutput), nil, nil
+}
+
+func (l *ReLULayer) Params() (*Tensor, []float32) {
+	return nil, nil
+}
+
+func (l *ReLULayer) SetParams(weights *Tensor, bias []float32) {}
+
+func (l *ReLULayer) Type() string {
+	return "relu"
+}
+
+// SigmoidLayer represents a Sigmoid activation layer.
+type SigmoidLayer struct{}
+
+func NewSigmoidLayer() *SigmoidLayer {
+	return &SigmoidLayer{}
+}
+
+func (l *SigmoidLayer) Forward(input *Tensor) *Tensor {
+	return Sigmoid(input)
+}
+
+func (l *SigmoidLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
+	// gradInput = gradOutput * Sigmoid(input) * (1 - Sigmoid(input))
+	out := Sigmoid(input)
+	gradInput := NewTensor(input.Shape)
+	for i := range gradInput.Data {
+		gradInput.Data[i] = gradOutput.Data[i] * out.Data[i] * (1.0 - out.Data[i])
+	}
+	return gradInput, nil, nil
+}
+
+func (l *SigmoidLayer) Params() (*Tensor, []float32) {
+	return nil, nil
+}
+
+func (l *SigmoidLayer) SetParams(weights *Tensor, bias []float32) {}
+
+func (l *SigmoidLayer) Type() string {
+	return "sigmoid"
+}
+
+// MaxPool2DLayer represents a 2D max pooling layer.
+type MaxPool2DLayer struct {
+	KernelSize int
+	Stride     int
+}
+
+func NewMaxPool2DLayer(kernelSize, stride int) *MaxPool2DLayer {
+	return &MaxPool2DLayer{
+		KernelSize: kernelSize,
+		Stride:     stride,
+	}
+}
+
+func (l *MaxPool2DLayer) Forward(input *Tensor) *Tensor {
+	return MaxPool2D(input, l.KernelSize, l.Stride)
+}
+
+func (l *MaxPool2DLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
+	return MaxPool2DBackward(input, gradOutput, l.KernelSize, l.Stride), nil, nil
+}
+
+func (l *MaxPool2DLayer) Params() (*Tensor, []float32) {
+	return nil, nil
+}
+
+func (l *MaxPool2DLayer) SetParams(weights *Tensor, bias []float32) {}
+
+func (l *MaxPool2DLayer) Type() string {
+	return "maxpool2d"
+}
+
+// DenseLayer represents a fully connected layer.
+type DenseLayer struct {
+	Weights *Tensor
+	Bias    []float32
+}
+
+func NewDenseLayer(weights *Tensor, bias []float32) *DenseLayer {
+	return &DenseLayer{
+		Weights: weights,
+		Bias:    bias,
+	}
+}
+
+func (l *DenseLayer) Forward(input *Tensor) *Tensor {
+	return Dense(input, l.Weights, l.Bias)
+}
+
+func (l *DenseLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
+	return DenseBackward(input, l.Weights, l.Bias, gradOutput)
+}
+
+func (l *DenseLayer) Params() (*Tensor, []float32) {
+	return l.Weights, l.Bias
+}
+
+func (l *DenseLayer) SetParams(weights *Tensor, bias []float32) {
+	l.Weights = weights
+	l.Bias = bias
+}
+
+func (l *DenseLayer) Type() string {
+	return "dense"
+}
+
+// --- Functional Helpers ---
+
 // Conv2D performs a 2D convolution operation.
-// input: [channels, height, width]
-// weights: [num_filters, input_channels, kernel_height, kernel_width]
-// bias: [num_filters]
 func Conv2D(input, weights *Tensor, bias []float32, stride, padding int) *Tensor {
 	inChannels := input.Shape[0]
 	inHeight := input.Shape[1]
@@ -71,7 +229,6 @@ func Sigmoid(input *Tensor) *Tensor {
 }
 
 // MaxPool2D performs a 2D max pooling operation.
-// input: [channels, height, width]
 func MaxPool2D(input *Tensor, kernelSize, stride int) *Tensor {
 	channels := input.Shape[0]
 	inHeight := input.Shape[1]
@@ -107,9 +264,6 @@ func MaxPool2D(input *Tensor, kernelSize, stride int) *Tensor {
 }
 
 // Dense performs a fully connected (dense) layer operation.
-// input: any shape (will be flattened)
-// weights: [output_units, input_size]
-// bias: [output_units]
 func Dense(input, weights *Tensor, bias []float32) *Tensor {
 	numOutputs := weights.Shape[0]
 	expectedInputSize := weights.Shape[1]
@@ -133,11 +287,6 @@ func Dense(input, weights *Tensor, bias []float32) *Tensor {
 }
 
 // DenseBackward calculates the gradients for the Dense layer.
-// input: [input_size]
-// weights: [num_outputs, input_size]
-// bias: [num_outputs]
-// gradOutput: [num_outputs]
-// Returns: gradInput [input_size], gradWeights [num_outputs, input_size], gradBias [num_outputs]
 func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	numOutputs := weights.Shape[0]
 	expectedInputSize := weights.Shape[1]
@@ -156,10 +305,7 @@ func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (
 		gradBias[i] = goi
 
 		for j := 0; j < expectedInputSize; j++ {
-			// gradWeights = gradOutput * input^T
 			gradWeights.Set([]int{i, j}, goi*input.Data[j])
-
-			// gradInput = W^T * gradOutput
 			gradInput.Data[j] += weights.Get([]int{i, j}) * goi
 		}
 	}
@@ -201,8 +347,6 @@ func Conv2DBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor, 
 		for i := 0; i < outHeight; i++ {
 			for j := 0; j < outWidth; j++ {
 				goVal := gradOutput.Get([]int{f, i, j})
-				
-				// gradBias = sum(gradOutput)
 				gradBias[f] += goVal
 
 				for c := 0; c < inChannels; c++ {
@@ -212,11 +356,9 @@ func Conv2DBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor, 
 							jj := j*stride - padding + kj
 
 							if ii >= 0 && ii < inHeight && jj >= 0 && jj < inWidth {
-								// gradWeights = conv(input, gradOutput)
 								inVal := input.Get([]int{c, ii, jj})
 								gradWeights.Data[gradWeights.getIndex([]int{f, c, ki, kj})] += inVal * goVal
 
-								// gradInput = conv_transpose(gradOutput, weights)
 								wVal := weights.Get([]int{f, c, ki, kj})
 								gradInput.Data[gradInput.getIndex([]int{c, ii, jj})] += wVal * goVal
 							}
@@ -229,14 +371,12 @@ func Conv2DBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor, 
 
 	return gradInput, gradWeights, gradBias
 }
+
 // MaxPool2DBackward calculates the gradient for the MaxPool2D layer.
-// Note: This implementation re-finds the maximum values.
 func MaxPool2DBackward(input, gradOutput *Tensor, kernelSize, stride int) *Tensor {
 	channels := input.Shape[0]
-
 	outHeight := gradOutput.Shape[1]
 	outWidth := gradOutput.Shape[2]
-
 	gradInput := NewTensor(input.Shape)
 
 	for c := 0; c < channels; c++ {
@@ -259,7 +399,6 @@ func MaxPool2DBackward(input, gradOutput *Tensor, kernelSize, stride int) *Tenso
 					}
 				}
 				
-				// Update gradInput at the maxIdx
 				flatIdx := gradInput.getIndex([]int{c, maxIdx[0], maxIdx[1]})
 				gradInput.Data[flatIdx] += gradOutput.Get([]int{c, i, j})
 			}

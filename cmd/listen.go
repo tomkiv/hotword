@@ -46,7 +46,10 @@ func NewListenCmd() *cobra.Command {
 			}
 
 			// Create model instance
-			m := model.NewDenseModel(weights, bias)
+			m := model.NewSequentialModel(
+				model.NewDenseLayer(weights, bias),
+				model.NewSigmoidLayer(),
+			)
 
 			sampleRate := 16000
 			e := engine.NewEngine(m, sampleRate)

@@ -44,7 +44,10 @@ func NewVerifyCmd() *cobra.Command {
 			}
 
 			// Create model instance
-			m := model.NewDenseModel(weights, bias)
+			m := model.NewSequentialModel(
+				model.NewDenseLayer(weights, bias),
+				model.NewSigmoidLayer(),
+			)
 			e := engine.NewEngine(m, 16000)
 
 			var tp, tn, fp, fn int

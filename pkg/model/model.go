@@ -1,36 +1,43 @@
 package model
 
+// Layer represents a single neural network layer.
+type Layer interface {
+	Forward(input *Tensor) *Tensor
+	// Backward returns gradInput, gradWeights, gradBias
+	Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32)
+	// Params returns the weights and biases of the layer (if any)
+	Params() (*Tensor, []float32)
+	// SetParams sets the weights and biases of the layer
+	SetParams(weights *Tensor, bias []float32)
+	// Type returns the layer type name
+	Type() string
+}
+
 // Model represents a neural network model.
 type Model interface {
 	Forward(input *Tensor) *Tensor
-	GetWeights() *Tensor
-	GetBias() []float32
+	GetLayers() []Layer
 }
 
-// DenseModel is a simple model with a single Dense layer and Sigmoid activation.
-type DenseModel struct {
-	weights *Tensor
-	bias    []float32
+// SequentialModel is a model consisting of a sequence of layers.
+type SequentialModel struct {
+	Layers []Layer
 }
 
-// NewDenseModel creates a new DenseModel.
-func NewDenseModel(weights *Tensor, bias []float32) *DenseModel {
-	return &DenseModel{
-		weights: weights,
-		bias:    bias,
+// NewSequentialModel creates a new SequentialModel.
+func NewSequentialModel(layers ...Layer) *SequentialModel {
+	return &SequentialModel{Layers: layers}
+}
+
+// Forward performs the forward pass through all layers.
+func (m *SequentialModel) Forward(input *Tensor) *Tensor {
+	out := input
+	for _, layer := range m.Layers {
+		out = layer.Forward(out)
 	}
+	return out
 }
 
-// Forward performs the forward pass: Sigmoid(Dense(input)).
-func (m *DenseModel) Forward(input *Tensor) *Tensor {
-	logits := Dense(input, m.weights, m.bias)
-	return Sigmoid(logits)
-}
-
-func (m *DenseModel) GetWeights() *Tensor {
-	return m.weights
-}
-
-func (m *DenseModel) GetBias() []float32 {
-	return m.bias
+func (m *SequentialModel) GetLayers() []Layer {
+	return m.Layers
 }

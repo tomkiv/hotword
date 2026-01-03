@@ -30,7 +30,10 @@ func TestEngine(t *testing.T) {
 		}
 		bias := []float32{0.0}
 		
-		m := model.NewDenseModel(weights, bias)
+		m := model.NewSequentialModel(
+			model.NewDenseLayer(weights, bias),
+			model.NewSigmoidLayer(),
+		)
 		e := NewEngine(m, sampleRate)
 		
 		prob, detected := e.Process(samples, 0.5)
