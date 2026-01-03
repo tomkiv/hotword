@@ -22,7 +22,7 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Structured Model Persistence' (Protocol in workflow.md)
 
 ## Phase 4: Training Pipeline Integration
-- [ ] Task: Update Trainer for multi-layer support
+- [x] Task: Update Trainer for multi-layer support (581024b)
   - [ ] Refactor `Trainer.TrainStep` to loop through layers for forward and backward passes
   - [ ] Verify convergence on a multi-layer CNN architecture
 - [ ] Task: Conductor - User Manual Verification 'Phase 4: Training Pipeline Integration' (Protocol in workflow.md)
