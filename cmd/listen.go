@@ -22,6 +22,7 @@ var listenModel string
 var listenThreshold float32
 var listenCooldown int
 var listenMinPower float32
+var listenDebug bool
 
 // NewListenCmd creates a new listen command
 func NewListenCmd() *cobra.Command {
@@ -34,6 +35,7 @@ func NewListenCmd() *cobra.Command {
 			threshold := float32(viper.GetFloat64("listen.threshold"))
 			cooldown := viper.GetInt("listen.cooldown")
 			minPower := float32(viper.GetFloat64("listen.min_power"))
+			debug := viper.GetBool("listen.debug")
 
 			if modelFile == "" {
 				return fmt.Errorf("model file is required (use --model or set in config)")
@@ -87,11 +89,11 @@ func NewListenCmd() *cobra.Command {
 					// Update VU meter and power level
 					_, peak := capture.CalculateLevels(samples)
 					bar := capture.GenerateVUBar(peak, 30)
-					
+
 					// We MUST update the engine's sliding window even on silence
 					// so that it has the correct context when sound starts.
 					// However, e.Process currently does both.
-					
+
 					// Skip processing during cooldown
 					if time.Since(lastDetection) < time.Duration(cooldown)*time.Millisecond {
 						fmt.Printf("\rVU: %s [COOLDOWN] Detections: %d\033[K", bar, detectionCount)
@@ -100,22 +102,36 @@ func NewListenCmd() *cobra.Command {
 
 					// Skip inference if audio is too quiet (silence)
 					if peak < minPower {
-						// We still need to push silence into the engine buffer!
-						// Since e.Process does both, we'll just call it but ignore the result
-						// or better yet, we'll add a way to just update the buffer.
-						e.Process(samples, 2.0) // Threshold 2.0 ensures no detection
-						fmt.Printf("\rVU: %s [SILENT] Detections: %d\033[K", bar, detectionCount)
+						// Update buffer without running inference or affecting smoothProb
+						e.PushSamples(samples)
+						if debug {
+							fmt.Printf("\n[SILENT] peak=%.4f\n", peak)
+						} else {
+							fmt.Printf("\rVU: %s [SILENT] Detections: %d\033[K", bar, detectionCount)
+						}
 						continue
 					}
 
-					confidence, detected := e.Process(samples, threshold)
-					fmt.Printf("\rVU: %s Confidence: %.4f | Detections: %d\033[K", bar, confidence, detectionCount)
+					info := e.ProcessDebug(samples, threshold)
+					confidence := info.SmoothProb
+					detected := info.Detected
+
+					if debug {
+						// Detailed debug output
+						fmt.Printf("\n[DEBUG] peak=%.4f raw=%.4f smooth=%.4f consec=%d warmup=%v ingested=%d detected=%v\n",
+							peak, info.RawProb, info.SmoothProb, info.ConsecutiveHigh, info.WarmupComplete, info.SamplesIngested, info.Detected)
+					} else {
+						fmt.Printf("\rVU: %s Confidence: %.4f | Detections: %d\033[K", bar, confidence, detectionCount)
+					}
 
 					if detected {
 						detectionCount++
 						lastDetection = time.Now()
 						fmt.Printf("\n[%s] *** HOTWORD DETECTED! (Confidence: %.4f) ***\n", lastDetection.Format("15:04:05"), confidence)
-						
+
+						// Reset engine state to prevent residual probability from affecting next detection
+						e.Reset()
+
 						// Execute actions
 						action := viper.GetString("listen.action")
 						script := viper.GetString("listen.script")
@@ -138,6 +154,7 @@ func NewListenCmd() *cobra.Command {
 	cmd.Flags().Float32Var(&listenThreshold, "threshold", 0.5, "Confidence threshold for detection")
 	cmd.Flags().IntVar(&listenCooldown, "cooldown", 2000, "Cooldown period in milliseconds after detection")
 	cmd.Flags().Float32Var(&listenMinPower, "min-power", 0.001, "Minimum audio power to trigger inference")
+	cmd.Flags().BoolVar(&listenDebug, "debug", false, "Enable debug output showing raw model probabilities")
 
 	viper.BindPFlag("listen.action", cmd.Flags().Lookup("action"))
 	viper.BindPFlag("listen.script", cmd.Flags().Lookup("script"))
@@ -145,6 +162,7 @@ func NewListenCmd() *cobra.Command {
 	viper.BindPFlag("listen.threshold", cmd.Flags().Lookup("threshold"))
 	viper.BindPFlag("listen.cooldown", cmd.Flags().Lookup("cooldown"))
 	viper.BindPFlag("listen.min_power", cmd.Flags().Lookup("min-power"))
+	viper.BindPFlag("listen.debug", cmd.Flags().Lookup("debug"))
 
 	return cmd
 }

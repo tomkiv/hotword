@@ -24,6 +24,8 @@ model:
     - type: maxpool2d
       kernel: 2
       stride: 2
+    - type: gru
+      units: 32
     - type: dense
       units: 1
     - type: sigmoid

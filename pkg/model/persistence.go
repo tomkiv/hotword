@@ -19,6 +19,7 @@ const (
 	LayerTypeSigmoid   = uint32(3)
 	LayerTypeMaxPool2D = uint32(4)
 	LayerTypeDense     = uint32(5)
+	LayerTypeGRU       = uint32(6)
 )
 
 func layerToID(l Layer) uint32 {
@@ -33,6 +34,8 @@ func layerToID(l Layer) uint32 {
 		return LayerTypeMaxPool2D
 	case "dense":
 		return LayerTypeDense
+	case "gru":
+		return LayerTypeGRU
 	default:
 		return 0
 	}
@@ -103,6 +106,32 @@ func SaveModel(path string, m Model) error {
 				return err
 			}
 			if err := saveBias(f, dense.Bias); err != nil {
+				return err
+			}
+
+		case LayerTypeGRU:
+			gru := l.(*GRULayer)
+			// Save input/hidden sizes
+			if err := binary.Write(f, binary.LittleEndian, uint32(gru.InputSize)); err != nil {
+				return err
+			}
+			if err := binary.Write(f, binary.LittleEndian, uint32(gru.HiddenSize)); err != nil {
+				return err
+			}
+			// Save all weight tensors
+			for _, w := range []*Tensor{gru.Wz, gru.Wr, gru.Wh, gru.Uz, gru.Ur, gru.Uh} {
+				if err := saveTensor(f, w); err != nil {
+					return err
+				}
+			}
+			// Save biases
+			if err := saveBias(f, gru.Bz); err != nil {
+				return err
+			}
+			if err := saveBias(f, gru.Br); err != nil {
+				return err
+			}
+			if err := saveBias(f, gru.Bh); err != nil {
 				return err
 			}
 		}
@@ -198,6 +227,33 @@ func LoadModel(path string) (Model, error) {
 				return nil, err
 			}
 			l = NewDenseLayer(w, b)
+
+		case LayerTypeGRU:
+			var inputSize, hiddenSize uint32
+			binary.Read(f, binary.LittleEndian, &inputSize)
+			binary.Read(f, binary.LittleEndian, &hiddenSize)
+
+			gru := NewGRULayer(int(inputSize), int(hiddenSize))
+
+			// Load weight tensors
+			weights := []*Tensor{gru.Wz, gru.Wr, gru.Wh, gru.Uz, gru.Ur, gru.Uh}
+			for i := range weights {
+				w, err := loadTensor(f)
+				if err != nil {
+					return nil, err
+				}
+				copy(weights[i].Data, w.Data)
+			}
+
+			// Load biases
+			bz, _ := loadBias(f)
+			br, _ := loadBias(f)
+			bh, _ := loadBias(f)
+			copy(gru.Bz, bz)
+			copy(gru.Br, br)
+			copy(gru.Bh, bh)
+
+			l = gru
 
 		default:
 			return nil, fmt.Errorf("unknown layer type ID: %d", typeID)

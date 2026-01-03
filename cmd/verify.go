@@ -50,8 +50,10 @@ func NewVerifyCmd() *cobra.Command {
 
 			cmd.Printf("Verifying %d samples...\n", len(ds.Samples))
 			for i, sample := range ds.Samples {
-				_, detected := e.Process(sample.Audio, threshold)
-				
+				// Use ProcessSingle for independent sample evaluation (no smoothing)
+				prob := e.ProcessSingle(sample.Audio)
+				detected := prob >= threshold
+
 				if sample.IsHotword {
 					if detected {
 						tp++
@@ -98,6 +100,7 @@ func NewVerifyCmd() *cobra.Command {
 
 	return cmd
 }
+
 var verifyCmd = NewVerifyCmd()
 
 func init() {

@@ -28,7 +28,7 @@ func BuildModelFromConfig(configs []LayerConfig, inputShape []int) (*SequentialM
 			inChannels := currentShape[0]
 			weightsShape := []int{cfg.Filters, inChannels, cfg.KernelSize, cfg.KernelSize}
 			weights := NewTensor(weightsShape)
-			
+
 			// Xavier initialization
 			fanIn := inChannels * cfg.KernelSize * cfg.KernelSize
 			fanOut := cfg.Filters * cfg.KernelSize * cfg.KernelSize
@@ -36,10 +36,10 @@ func BuildModelFromConfig(configs []LayerConfig, inputShape []int) (*SequentialM
 			for i := range weights.Data {
 				weights.Data[i] = (rand.Float32()*2 - 1) * scale
 			}
-			
+
 			bias := make([]float32, cfg.Filters)
 			layer = NewConv2DLayer(weights, bias, cfg.Stride, cfg.Padding)
-			
+
 			// Update shape
 			outHeight := (currentShape[1]+2*cfg.Padding-cfg.KernelSize)/cfg.Stride + 1
 			outWidth := (currentShape[2]+2*cfg.Padding-cfg.KernelSize)/cfg.Stride + 1
@@ -63,16 +63,37 @@ func BuildModelFromConfig(configs []LayerConfig, inputShape []int) (*SequentialM
 			}
 			weightsShape := []int{cfg.Units, inSize}
 			weights := NewTensor(weightsShape)
-			
+
 			// Xavier initialization
 			scale := float32(math.Sqrt(6.0 / float64(inSize+cfg.Units)))
 			for i := range weights.Data {
 				weights.Data[i] = (rand.Float32()*2 - 1) * scale
 			}
-			
+
 			bias := make([]float32, cfg.Units)
 			layer = NewDenseLayer(weights, bias)
 			currentShape = []int{cfg.Units}
+
+		case "gru":
+			// GRU expects input from CNN: [channels, height, width]
+			// It will reshape to [height, channels*width] internally
+			var inputSize int
+			if len(currentShape) == 3 {
+				// From CNN: [channels, height, width]
+				inputSize = currentShape[0] * currentShape[2] // channels * width
+			} else if len(currentShape) == 1 {
+				inputSize = currentShape[0]
+			} else {
+				return nil, ErrUnsupportedLayer{Type: "gru (invalid input shape)"}
+			}
+
+			hiddenSize := cfg.Units
+			if hiddenSize == 0 {
+				hiddenSize = 32 // Default hidden size
+			}
+
+			layer = NewGRULayer(inputSize, hiddenSize)
+			currentShape = []int{hiddenSize} // Output is just the final hidden state
 
 		default:
 			return nil, ErrUnsupportedLayer{Type: cfg.Type}
