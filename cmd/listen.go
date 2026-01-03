@@ -154,15 +154,19 @@ func NewListenCmd() *cobra.Command {
 
 func executeAction(action string) {
 	cmd := exec.Command("sh", "-c", action)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("Action error: %v\n", err)
+		fmt.Printf("\nAction error: %v\n", err)
 	}
 }
 
 func executeScript(path string) {
 	cmd := exec.Command(path)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("Script error: %v\n", err)
+		fmt.Printf("\nScript error: %v\n", err)
 	}
 }
 
