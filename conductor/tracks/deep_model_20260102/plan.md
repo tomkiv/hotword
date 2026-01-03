@@ -15,7 +15,7 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Configuration and Initialization' (Protocol in workflow.md)
 
 ## Phase 3: Structured Model Persistence
-- [ ] Task: Update binary format for multi-layer support
+- [x] Task: Update binary format for multi-layer support (df1662f)
   - [ ] Update `SaveModel` to include layer types and shapes in the header
   - [ ] Update `LoadModel` to dynamically reconstruct the model from the binary
   - [ ] Write tests for saving/loading multi-layer CNNs
