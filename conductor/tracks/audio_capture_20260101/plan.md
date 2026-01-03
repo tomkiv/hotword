@@ -15,10 +15,10 @@
   - [x] Implement ASCII progress bar visualization
 - [x] Task: Create standalone audio capture tool (61ba51a)
   - [x] Create `scripts/audio/verify_capture.go` to test mic input and VU meter
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: User Feedback and Calibration' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: User Feedback and Calibration' (Protocol in workflow.md) (14b9cab)
 
-## Phase 3: macOS Support
+## Phase 3: macOS Support [checkpoint: 14b9cab]
 - [x] Task: Implement macOS command-line capture (89d531d)
   - [ ] Implement `capture_darwin.go` using `sox` or `ffmpeg`
   - [ ] Verify capture on macOS with the standalone script
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: macOS Support' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: macOS Support' (Protocol in workflow.md) (14b9cab)
