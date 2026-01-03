@@ -9,130 +9,303 @@ import (
 
 const (
 	MagicBytes = "HWMD"
-	Version    = uint16(1)
+	VersionV1  = uint16(1)
+	VersionV2  = uint16(2)
 )
 
-// SaveModelToWriter serializes the model weights and biases to an io.Writer.
-func SaveModelToWriter(w io.Writer, weights *Tensor, bias []float32) error {
-	// 1. Magic Bytes
-	if _, err := w.Write([]byte(MagicBytes)); err != nil {
-		return fmt.Errorf("failed to write magic bytes: %w", err)
-	}
+const (
+	LayerTypeConv2D    = uint32(1)
+	LayerTypeReLU      = uint32(2)
+	LayerTypeSigmoid   = uint32(3)
+	LayerTypeMaxPool2D = uint32(4)
+	LayerTypeDense     = uint32(5)
+)
 
-	// 2. Version
-	if err := binary.Write(w, binary.LittleEndian, Version); err != nil {
-		return fmt.Errorf("failed to write version: %w", err)
+func layerToID(l Layer) uint32 {
+	switch l.Type() {
+	case "conv2d":
+		return LayerTypeConv2D
+	case "relu":
+		return LayerTypeReLU
+	case "sigmoid":
+		return LayerTypeSigmoid
+	case "maxpool2d":
+		return LayerTypeMaxPool2D
+	case "dense":
+		return LayerTypeDense
+	default:
+		return 0
 	}
-
-	// 3. Metadata
-	// For this minimalist implementation, we'll store:
-	// - numRows (num filters/units)
-	// - numCols (input size)
-	// - numBias
-	numRows := uint32(weights.Shape[0])
-	numCols := uint32(weights.Shape[1])
-	numBias := uint32(len(bias))
-
-	if err := binary.Write(w, binary.LittleEndian, numRows); err != nil {
-		return fmt.Errorf("failed to write numRows: %w", err)
-	}
-	if err := binary.Write(w, binary.LittleEndian, numCols); err != nil {
-		return fmt.Errorf("failed to write numCols: %w", err)
-	}
-	if err := binary.Write(w, binary.LittleEndian, numBias); err != nil {
-		return fmt.Errorf("failed to write numBias: %w", err)
-	}
-
-	// 4. Weights Data
-	for _, val := range weights.Data {
-		if err := binary.Write(w, binary.LittleEndian, val); err != nil {
-			return fmt.Errorf("failed to write weight value: %w", err)
-		}
-	}
-
-	// 5. Bias Data
-	for _, val := range bias {
-		if err := binary.Write(w, binary.LittleEndian, val); err != nil {
-			return fmt.Errorf("failed to write bias value: %w", err)
-		}
-	}
-
-	return nil
 }
 
-// SaveModel saves the model weights and biases to a file.
-func SaveModel(path string, weights *Tensor, bias []float32) error {
+// SaveModel saves a Model to a file using the Version 2 format.
+func SaveModel(path string, m Model) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create model file: %w", err)
 	}
 	defer f.Close()
 
-	return SaveModelToWriter(f, weights, bias)
+	// 1. Magic Bytes
+	if _, err := f.Write([]byte(MagicBytes)); err != nil {
+		return err
+	}
+
+	// 2. Version
+	if err := binary.Write(f, binary.LittleEndian, VersionV2); err != nil {
+		return err
+	}
+
+	layers := m.GetLayers()
+	// 3. Layer Count
+	if err := binary.Write(f, binary.LittleEndian, uint32(len(layers))); err != nil {
+		return err
+	}
+
+	// 4. Layers
+	for _, l := range layers {
+		typeID := layerToID(l)
+		if err := binary.Write(f, binary.LittleEndian, typeID); err != nil {
+			return err
+		}
+
+		switch typeID {
+		case LayerTypeConv2D:
+			conv := l.(*Conv2DLayer)
+			if err := saveTensor(f, conv.Weights); err != nil {
+				return err
+			}
+			if err := saveBias(f, conv.Bias); err != nil {
+				return err
+			}
+			if err := binary.Write(f, binary.LittleEndian, uint32(conv.Stride)); err != nil {
+				return err
+			}
+			if err := binary.Write(f, binary.LittleEndian, uint32(conv.Padding)); err != nil {
+				return err
+			}
+
+		case LayerTypeReLU, LayerTypeSigmoid:
+			// No extra params
+
+		case LayerTypeMaxPool2D:
+			mp := l.(*MaxPool2DLayer)
+			if err := binary.Write(f, binary.LittleEndian, uint32(mp.KernelSize)); err != nil {
+				return err
+			}
+			if err := binary.Write(f, binary.LittleEndian, uint32(mp.Stride)); err != nil {
+				return err
+			}
+
+		case LayerTypeDense:
+			dense := l.(*DenseLayer)
+			if err := saveTensor(f, dense.Weights); err != nil {
+				return err
+			}
+			if err := saveBias(f, dense.Bias); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
-// LoadModelFromReader restores weights and biases from an io.Reader.
-func LoadModelFromReader(r io.Reader) (*Tensor, []float32, error) {
+// LoadModel loads a Model from a file.
+func LoadModel(path string) (Model, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open model file: %w", err)
+	}
+	defer f.Close()
+
 	// 1. Magic Bytes
 	magic := make([]byte, 4)
-	if _, err := io.ReadFull(r, magic); err != nil {
-		return nil, nil, fmt.Errorf("failed to read magic bytes: %w", err)
+	if _, err := io.ReadFull(f, magic); err != nil {
+		return nil, err
 	}
 	if string(magic) != MagicBytes {
-		return nil, nil, fmt.Errorf("invalid model file format: wrong magic bytes")
+		return nil, fmt.Errorf("invalid magic bytes")
 	}
 
 	// 2. Version
 	var version uint16
-	if err := binary.Read(r, binary.LittleEndian, &version); err != nil {
-		return nil, nil, fmt.Errorf("failed to read version: %w", err)
-	}
-	if version != Version {
-		return nil, nil, fmt.Errorf("unsupported model version: %d", version)
+	if err := binary.Read(f, binary.LittleEndian, &version); err != nil {
+		return nil, err
 	}
 
-	// 3. Metadata
+	if version == VersionV1 {
+		// Legacy V1 loader (simple weights/bias)
+		w, b, err := loadLegacyV1(f)
+		if err != nil {
+			return nil, err
+		}
+		// Convert to SequentialModel
+		return NewSequentialModel(NewDenseLayer(w, b), NewSigmoidLayer()), nil
+	}
+
+	if version != VersionV2 {
+		return nil, fmt.Errorf("unsupported model version: %d", version)
+	}
+
+	// 3. Layer Count
+	var layerCount uint32
+	if err := binary.Read(f, binary.LittleEndian, &layerCount); err != nil {
+		return nil, err
+	}
+
+	var layers []Layer
+	for i := uint32(0); i < layerCount; i++ {
+		var typeID uint32
+		if err := binary.Read(f, binary.LittleEndian, &typeID); err != nil {
+			return nil, err
+		}
+
+		var l Layer
+		switch typeID {
+		case LayerTypeConv2D:
+			w, err := loadTensor(f)
+			if err != nil {
+				return nil, err
+			}
+			b, err := loadBias(f)
+			if err != nil {
+				return nil, err
+			}
+			var stride, padding uint32
+			binary.Read(f, binary.LittleEndian, &stride)
+			binary.Read(f, binary.LittleEndian, &padding)
+			l = NewConv2DLayer(w, b, int(stride), int(padding))
+
+		case LayerTypeReLU:
+			l = NewReLULayer()
+		case LayerTypeSigmoid:
+			l = NewSigmoidLayer()
+
+		case LayerTypeMaxPool2D:
+			var kernelSize, stride uint32
+			binary.Read(f, binary.LittleEndian, &kernelSize)
+			binary.Read(f, binary.LittleEndian, &stride)
+			l = NewMaxPool2DLayer(int(kernelSize), int(stride))
+
+		case LayerTypeDense:
+			w, err := loadTensor(f)
+			if err != nil {
+				return nil, err
+			}
+			b, err := loadBias(f)
+			if err != nil {
+				return nil, err
+			}
+			l = NewDenseLayer(w, b)
+
+		default:
+			return nil, fmt.Errorf("unknown layer type ID: %d", typeID)
+		}
+		layers = append(layers, l)
+	}
+
+	return NewSequentialModel(layers...), nil
+}
+
+// Helpers
+
+func saveTensor(w io.Writer, t *Tensor) error {
+	if err := binary.Write(w, binary.LittleEndian, uint32(len(t.Shape))); err != nil {
+		return err
+	}
+	for _, dim := range t.Shape {
+		if err := binary.Write(w, binary.LittleEndian, uint32(dim)); err != nil {
+			return err
+		}
+	}
+	for _, val := range t.Data {
+		if err := binary.Write(w, binary.LittleEndian, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadTensor(r io.Reader) (*Tensor, error) {
+	var numDims uint32
+	if err := binary.Read(r, binary.LittleEndian, &numDims); err != nil {
+		return nil, err
+	}
+	shape := make([]int, numDims)
+	size := 1
+	for i := range shape {
+		var dim uint32
+		if err := binary.Read(r, binary.LittleEndian, &dim); err != nil {
+			return nil, err
+		}
+		shape[i] = int(dim)
+		size *= shape[i]
+	}
+	t := NewTensor(shape)
+	for i := 0; i < size; i++ {
+		var val float32
+		if err := binary.Read(r, binary.LittleEndian, &val); err != nil {
+			return nil, err
+		}
+		t.Data[i] = val
+	}
+	return t, nil
+}
+
+func saveBias(w io.Writer, b []float32) error {
+	if err := binary.Write(w, binary.LittleEndian, uint32(len(b))); err != nil {
+		return err
+	}
+	for _, val := range b {
+		if err := binary.Write(w, binary.LittleEndian, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadBias(r io.Reader) ([]float32, error) {
+	var length uint32
+	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
+		return nil, err
+	}
+	b := make([]float32, length)
+	for i := range b {
+		var val float32
+		if err := binary.Read(r, binary.LittleEndian, &val); err != nil {
+			return nil, err
+		}
+		b[i] = val
+	}
+	return b, nil
+}
+
+func loadLegacyV1(r io.Reader) (*Tensor, []float32, error) {
 	var numRows, numCols, numBias uint32
 	if err := binary.Read(r, binary.LittleEndian, &numRows); err != nil {
-		return nil, nil, fmt.Errorf("failed to read numRows: %w", err)
+		return nil, nil, err
 	}
 	if err := binary.Read(r, binary.LittleEndian, &numCols); err != nil {
-		return nil, nil, fmt.Errorf("failed to read numCols: %w", err)
+		return nil, nil, err
 	}
 	if err := binary.Read(r, binary.LittleEndian, &numBias); err != nil {
-		return nil, nil, fmt.Errorf("failed to read numBias: %w", err)
+		return nil, nil, err
 	}
 
-	// 4. Weights Data
 	weights := NewTensor([]int{int(numRows), int(numCols)})
 	for i := range weights.Data {
 		var val float32
-		if err := binary.Read(r, binary.LittleEndian, &val); err != nil {
-			return nil, nil, fmt.Errorf("failed to read weight at index %d: %w", i, err)
-		}
+		binary.Read(r, binary.LittleEndian, &val)
 		weights.Data[i] = val
 	}
 
-	// 5. Bias Data
 	bias := make([]float32, numBias)
 	for i := range bias {
 		var val float32
-		if err := binary.Read(r, binary.LittleEndian, &val); err != nil {
-			return nil, nil, fmt.Errorf("failed to read bias at index %d: %w", i, err)
-		}
+		binary.Read(r, binary.LittleEndian, &val)
 		bias[i] = val
 	}
 
 	return weights, bias, nil
-}
-
-// LoadModel loads the model weights and biases from a file.
-func LoadModel(path string) (*Tensor, []float32, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open model file: %w", err)
-	}
-	defer f.Close()
-
-	return LoadModelFromReader(f)
 }

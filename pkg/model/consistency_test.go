@@ -1,52 +1,42 @@
 package model
 
 import (
-	"bytes"
-	"fmt"
-	"math"
+	"os"
 	"testing"
 )
 
 func TestModelConsistency(t *testing.T) {
 	t.Run("Save Load Inference Match", func(t *testing.T) {
-		// 1. Create a model
-		weights := NewTensor([]int{1, 10})
-		for i := range weights.Data {
-			weights.Data[i] = float32(i) * 0.05
+		// Create a realistic-ish model: Conv2D -> ReLU -> Dense -> Sigmoid
+		configs := []LayerConfig{
+			{Type: "conv2d", Filters: 4, KernelSize: 3, Stride: 1, Padding: 1},
+			{Type: "relu"},
+			{Type: "dense", Units: 1},
+			{Type: "sigmoid"},
 		}
-		bias := []float32{0.25}
-
-		// 2. Create dummy input
-		input := NewTensor([]int{10})
-		for i := range input.Data {
-			input.Data[i] = 1.0
-		}
-
-		// 3. Run initial inference
-		originalOutput := Dense(input, weights, bias)
-		originalVal := originalOutput.Data[0]
-
-		// 4. Save to buffer
-		buf := new(bytes.Buffer)
-		if err := SaveModelToWriter(buf, weights, bias); err != nil {
-			t.Fatalf("Failed to save: %v", err)
-		}
-
-		// 5. Load back
-		lWeights, lBias, err := LoadModelFromReader(buf)
+		inputShape := []int{1, 10, 10}
+		
+		mOrig, _ := BuildModelFromConfig(configs, inputShape)
+		
+		tmpFile := "consistency_test.bin"
+		SaveModel(tmpFile, mOrig)
+		defer os.Remove(tmpFile)
+		
+		mLoaded, err := LoadModel(tmpFile)
 		if err != nil {
-			t.Fatalf("Failed to load: %v", err)
-		}
-
-		// 6. Run inference with loaded model
-		loadedOutput := Dense(input, lWeights, lBias)
-		loadedVal := loadedOutput.Data[0]
-
-		// 7. Compare results
-		if math.Abs(float64(originalVal-loadedVal)) > 1e-7 {
-			t.Errorf("Inference result mismatch! Original: %f, Loaded: %f", originalVal, loadedVal)
+			t.Fatalf("Failed to load model: %v", err)
 		}
 		
-		fmt.Printf("Consistency Check: Original Prob=%.6f, Loaded Prob=%.6f\n", originalVal, loadedVal)
+		input := NewTensor(inputShape)
+		for i := range input.Data {
+			input.Data[i] = 0.123
+		}
+		
+		outOrig := mOrig.Forward(input)
+		outLoaded := mLoaded.Forward(input)
+		
+		if outOrig.Data[0] != outLoaded.Data[0] {
+			t.Errorf("Consistency check failed: Original Prob=%f, Loaded Prob=%f", outOrig.Data[0], outLoaded.Data[0])
+		}
 	})
 }

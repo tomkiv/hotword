@@ -1,116 +1,97 @@
 package model
 
 import (
-	"bytes"
+	"encoding/binary"
 	"os"
 	"testing"
 )
 
-func TestSaveModel(t *testing.T) {
-	t.Run("Serialize Model", func(t *testing.T) {
-		// Input size 4
-		// weights [2, 4]
-		// bias [2]
-		weights := NewTensor([]int{2, 4})
-		for i := range weights.Data {
-			weights.Data[i] = float32(i)
+func TestPersistenceV2(t *testing.T) {
+	// Create a complex model
+	configs := []LayerConfig{
+		{Type: "conv2d", Filters: 4, KernelSize: 3, Stride: 1, Padding: 1},
+		{Type: "relu"},
+		{Type: "maxpool2d", KernelSize: 2, Stride: 2},
+		{Type: "dense", Units: 2},
+		{Type: "sigmoid"},
+	}
+	
+	// Input shape: [1, 10, 10]
+	mOrig, err := BuildModelFromConfig(configs, []int{1, 10, 10})
+	if err != nil {
+		t.Fatalf("Failed to build model: %v", err)
+	}
+	
+	tmpFile := "test_model_v2.bin"
+	if err := SaveModel(tmpFile, mOrig); err != nil {
+		t.Fatalf("SaveModel failed: %v", err)
+	}
+	defer os.Remove(tmpFile)
+	
+	mLoaded, err := LoadModel(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadModel failed: %v", err)
+	}
+	
+	layersOrig := mOrig.GetLayers()
+	layersLoaded := mLoaded.GetLayers()
+	
+	if len(layersOrig) != len(layersLoaded) {
+		t.Errorf("Expected %d layers, got %d", len(layersOrig), len(layersLoaded))
+	}
+	
+	for i := range layersOrig {
+		if layersOrig[i].Type() != layersLoaded[i].Type() {
+			t.Errorf("Layer %d type mismatch: expected %s, got %s", i, layersOrig[i].Type(), layersLoaded[i].Type())
 		}
-		bias := []float32{0.5, -0.5}
-
-		buf := new(bytes.Buffer)
-		err := SaveModelToWriter(buf, weights, bias)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		data := buf.Bytes()
-		// Check magic bytes
-		if string(data[0:4]) != "HWMD" {
-			t.Errorf("Expected magic bytes HWMD, got %s", string(data[0:4]))
-		}
-
-		// Expected size:
-		// 4 (magic) + 2 (version) + 4 (inputSize) + 4 (numWeights) + 4 (numBias)
-		// + 8 * 4 (weights) + 2 * 4 (bias)
-		// = 4 + 2 + 4 + 4 + 4 + 32 + 8 = 58 bytes
-		expectedSize := 58
-		if len(data) != expectedSize {
-			t.Errorf("Expected buffer size %d, got %d", expectedSize, len(data))
-		}
-	})
-
-	t.Run("Save Model to File", func(t *testing.T) {
-		weights := NewTensor([]int{1, 1})
-		weights.Data[0] = 1.0
-		bias := []float32{0.0}
-
-		tmpFile := "/Users/vitalii/.gemini/tmp/4ea7f44ea8ed39b191b36db796e7cfa745b89b5eb30827822379ef6ae57a83d0/model.bin"
-		err := SaveModel(tmpFile, weights, bias)
-		if err != nil {
-			t.Fatalf("Failed to save model: %v", err)
-		}
-		defer os.Remove(tmpFile)
-
-		// Check if file exists and has content
-		info, err := os.Stat(tmpFile)
-		if err != nil {
-			t.Fatalf("File does not exist: %v", err)
-		}
-		if info.Size() == 0 {
-			t.Error("Saved file is empty")
-		}
-	})
+	}
+	
+	// Verify end-to-end inference match
+	input := NewTensor([]int{1, 10, 10})
+	for i := range input.Data {
+		input.Data[i] = 0.5
+	}
+	
+	outOrig := mOrig.Forward(input)
+	outLoaded := mLoaded.Forward(input)
+	
+	if outOrig.Data[0] != outLoaded.Data[0] {
+		t.Errorf("Inference mismatch: %f != %f", outOrig.Data[0], outLoaded.Data[0])
+	}
 }
 
-func TestLoadModel(t *testing.T) {
-	t.Run("Valid Load", func(t *testing.T) {
-		weights := NewTensor([]int{2, 2})
-		weights.Data = []float32{1.0, 2.0, 3.0, 4.0}
-		bias := []float32{0.5, -0.5}
-
-		buf := new(bytes.Buffer)
-		SaveModelToWriter(buf, weights, bias)
-
-		loadedWeights, loadedBias, err := LoadModelFromReader(buf)
-		if err != nil {
-			t.Fatalf("Failed to load model: %v", err)
-		}
-
-		if loadedWeights.Shape[0] != 2 || loadedWeights.Shape[1] != 2 {
-			t.Errorf("Expected shape [2, 2], got %v", loadedWeights.Shape)
-		}
-		if loadedWeights.Data[0] != 1.0 || loadedWeights.Data[3] != 4.0 {
-			t.Error("Weights data mismatch")
-		}
-		if len(loadedBias) != 2 || loadedBias[0] != 0.5 {
-			t.Error("Bias data mismatch")
-		}
-	})
-
-	t.Run("Invalid Magic Bytes", func(t *testing.T) {
-		buf := bytes.NewReader([]byte("NOTAMODEL"))
-		_, _, err := LoadModelFromReader(buf)
-		if err == nil {
-			t.Error("Expected error for invalid magic bytes")
-		}
-	})
-
-	t.Run("Load Model from File", func(t *testing.T) {
-		weights := NewTensor([]int{1, 1})
-		weights.Data[0] = 99.0
-		bias := []float32{1.1}
-
-		tmpFile := "/Users/vitalii/.gemini/tmp/4ea7f44ea8ed39b191b36db796e7cfa745b89b5eb30827822379ef6ae57a83d0/model_load.bin"
-		SaveModel(tmpFile, weights, bias)
-		defer os.Remove(tmpFile)
-
-		lw, lb, err := LoadModel(tmpFile)
-		if err != nil {
-			t.Fatalf("Failed to load model: %v", err)
-		}
-
-		if lw.Data[0] != 99.0 || lb[0] != 1.1 {
-			t.Error("Loaded data mismatch")
-		}
-	})
+func TestLoadLegacyV1(t *testing.T) {
+	tmpFile := "test_model_v1.bin"
+	f, _ := os.Create(tmpFile)
+	
+	f.Write([]byte("HWMD"))
+	binary.Write(f, binary.LittleEndian, uint16(1)) // Version 1
+	
+	// numRows=1, numCols=2, numBias=1
+	binary.Write(f, binary.LittleEndian, uint32(1))
+	binary.Write(f, binary.LittleEndian, uint32(2))
+	binary.Write(f, binary.LittleEndian, uint32(1))
+	
+	// weights: [0.1, 0.2]
+	binary.Write(f, binary.LittleEndian, float32(0.1))
+	binary.Write(f, binary.LittleEndian, float32(0.2))
+	
+	// bias: [0.5]
+	binary.Write(f, binary.LittleEndian, float32(0.5))
+	f.Close()
+	defer os.Remove(tmpFile)
+	
+	m, err := LoadModel(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadModel V1 failed: %v", err)
+	}
+	
+	layers := m.GetLayers()
+	if len(layers) != 2 {
+		t.Errorf("Expected 2 layers for converted V1 model, got %d", len(layers))
+	}
+	
+	if layers[0].Type() != "dense" || layers[1].Type() != "sigmoid" {
+		t.Errorf("Wrong layer types: %s, %s", layers[0].Type(), layers[1].Type())
+	}
 }
