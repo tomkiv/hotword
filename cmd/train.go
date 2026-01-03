@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"path/filepath"
 	"time"
@@ -60,26 +59,37 @@ func NewTrainCmd() *cobra.Command {
 				return features.Extract(samples, sampleRate, windowSize, hopSize, numMelFilters)
 			}
 
-			// Initialize model weights with Xavier/Glorot initialization
-			firstFeatures := extractor(ds.Samples[0].Audio)
-			inputSize := len(firstFeatures.Data)
-			
-			// Xavier init scale: sqrt(6 / (in + out))
-			scale := float32(math.Sqrt(6.0 / float64(inputSize+1)))
-			
-			weights := model.NewTensor([]int{1, inputSize})
-			for i := range weights.Data {
-				weights.Data[i] = (rand.Float32()*2.0 - 1.0) * scale
+			// Get model configuration from Viper
+			var modelConfigs []model.LayerConfig
+			if err := viper.UnmarshalKey("model.layers", &modelConfigs); err != nil {
+				return fmt.Errorf("failed to parse model configuration: %w", err)
 			}
-			bias := make([]float32, 1)
 
-			trainer := train.NewTrainer(weights, bias, lr)
+			// If no model config, provide a default single-layer model for backward compatibility
+			if len(modelConfigs) == 0 {
+				modelConfigs = []model.LayerConfig{
+					{Type: "dense", Units: 1},
+					{Type: "sigmoid"},
+				}
+			}
+
+			// Determine input shape from first sample
+			firstFeatures := extractor(ds.Samples[0].Audio)
+			inputShape := firstFeatures.Shape
+
+			// Build model with Xavier initialization
+			m, err := model.BuildModelFromConfig(modelConfigs, inputShape)
+			if err != nil {
+				return fmt.Errorf("failed to build model: %w", err)
+			}
+
+			trainer := train.NewTrainer(m, lr)
 			
 			cmd.Printf("Starting training for %d epochs (LR: %f)...\n", epochs, lr)
 			trainer.Train(ds, epochs, extractor)
 
 			cmd.Printf("Saving model to %s...\n", out)
-			if err := model.SaveModel(out, weights, bias); err != nil {
+			if err := model.SaveModel(out, m); err != nil {
 				return fmt.Errorf("failed to save model: %w", err)
 			}
 

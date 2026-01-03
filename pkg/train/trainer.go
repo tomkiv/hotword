@@ -7,16 +7,14 @@ import (
 
 // Trainer manages the training process for a hotword model.
 type Trainer struct {
-	weights      *model.Tensor
-	bias         []float32
+	model        model.Model
 	learningRate float32
 }
 
 // NewTrainer creates a new Trainer.
-func NewTrainer(weights *model.Tensor, bias []float32, lr float32) *Trainer {
+func NewTrainer(m model.Model, lr float32) *Trainer {
 	return &Trainer{
-		weights:      weights,
-		bias:         bias,
+		model:        m,
 		learningRate: lr,
 	}
 }
@@ -24,26 +22,34 @@ func NewTrainer(weights *model.Tensor, bias []float32, lr float32) *Trainer {
 // TrainStep performs a single training iteration on a single sample.
 // Returns the loss before the update.
 func (t *Trainer) TrainStep(input *model.Tensor, target float32) float32 {
-	// 1. Forward Pass
-	logits := model.Dense(input, t.weights, t.bias)
-	output := model.Sigmoid(logits)
-	prediction := output.Data[0]
-
-	// 2. Calculate Loss
+	// 1. Forward Pass (storing intermediate inputs for backward pass)
+	layers := t.model.GetLayers()
+	inputs := make([]*model.Tensor, len(layers)+1)
+	inputs[0] = input
+	
+	for i, layer := range layers {
+		inputs[i+1] = layer.Forward(inputs[i])
+	}
+	
+	prediction := inputs[len(inputs)-1].Data[0]
 	loss := model.BCELoss([]float32{prediction}, []float32{target})
 
-	// 3. Backward Pass
-	// Numerically stable gradient for BCE + Sigmoid is simply (prediction - target)
-	// dL/dz = prediction - target, where z is the logit.
-	gradLogits := []float32{prediction - target}
+	// 2. Backward Pass
+	// dL/dz = prediction - target (numerically stable BCE+Sigmoid gradient)
+	grad := &model.Tensor{Data: []float32{prediction - target}, Shape: []int{1}}
 	
-	gradOutput := &model.Tensor{Data: gradLogits, Shape: []int{1}}
-
-	_, gradWeights, gradBias := model.DenseBackward(input, t.weights, t.bias, gradOutput)
-
-	// 4. Update Weights
-	model.SGDUpdate(t.weights, gradWeights, t.learningRate)
-	model.SGDBiasUpdate(t.bias, gradBias, t.learningRate)
+	for i := len(layers) - 1; i >= 0; i-- {
+		gradInput, gradWeights, gradBias := layers[i].Backward(inputs[i], grad)
+		
+		// If the layer has parameters, update them
+		if gradWeights != nil {
+			weights, bias := layers[i].Params()
+			model.SGDUpdate(weights, gradWeights, t.learningRate)
+			model.SGDBiasUpdate(bias, gradBias, t.learningRate)
+		}
+		
+		grad = gradInput
+	}
 
 	return loss
 }

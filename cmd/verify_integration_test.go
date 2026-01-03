@@ -29,7 +29,11 @@ func TestVerifyIntegration(t *testing.T) {
 	// Input size for 1s audio: 2440
 	weights := model.NewTensor([]int{1, 2440})
 	bias := []float32{0.0}
-	if err := model.SaveModel(modelFile, weights, bias); err != nil {
+	m := model.NewSequentialModel(
+		model.NewDenseLayer(weights, bias),
+		model.NewSigmoidLayer(),
+	)
+	if err := model.SaveModel(modelFile, m); err != nil {
 		t.Fatalf("Failed to save mock model: %v", err)
 	}
 

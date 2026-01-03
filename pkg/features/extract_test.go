@@ -30,7 +30,7 @@ func TestExtract(t *testing.T) {
 		t.Errorf("Expected data size %d, got %d", expectedSize, len(tensor.Data))
 	}
 
-	if tensor.Shape[0] != expectedSize {
-		t.Errorf("Expected shape [ %d ], got %v", expectedSize, tensor.Shape)
+	if tensor.Shape[0] != 1 || tensor.Shape[1] != expectedFrames || tensor.Shape[2] != numMelFilters {
+		t.Errorf("Expected shape [1, %d, %d], got %v", expectedFrames, numMelFilters, tensor.Shape)
 	}
 }

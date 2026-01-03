@@ -30,7 +30,11 @@ func TestVerifyExecution(t *testing.T) {
 	modelFile := filepath.Join(tmpDir, "model.bin")
 	weights := model.NewTensor([]int{1, 2440})
 	bias := []float32{0.0}
-	model.SaveModel(modelFile, weights, bias)
+	m := model.NewSequentialModel(
+		model.NewDenseLayer(weights, bias),
+		model.NewSigmoidLayer(),
+	)
+	model.SaveModel(modelFile, m)
 
 	root := NewRootCmd()
 	verify := NewVerifyCmd()

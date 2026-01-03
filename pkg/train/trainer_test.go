@@ -29,7 +29,11 @@ func TestTrainerStep(t *testing.T) {
 	// Let's use a target that causes a gradient. Target = 0.0
 	sample.IsHotword = false
 	
-	trainer := NewTrainer(weights, bias, learningRate)
+	m := model.NewSequentialModel(
+		model.NewDenseLayer(weights, bias),
+		model.NewSigmoidLayer(),
+	)
+	trainer := NewTrainer(m, learningRate)
 	loss := trainer.TrainStep(features, 0.0) // features, target
 	
 	if loss <= 0 {
@@ -45,7 +49,11 @@ func TestTrainerStep(t *testing.T) {
 func TestTrainLoop(t *testing.T) {
 	weights := model.NewTensor([]int{1, 2})
 	bias := []float32{0.0}
-	trainer := NewTrainer(weights, bias, 0.1)
+	m := model.NewSequentialModel(
+		model.NewDenseLayer(weights, bias),
+		model.NewSigmoidLayer(),
+	)
+	trainer := NewTrainer(m, 0.1)
 
 	ds := &Dataset{
 		Samples: []Sample{

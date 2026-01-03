@@ -23,16 +23,15 @@ func Extract(samples []float32, sampleRate, windowSize, hopSize, numMelFilters i
 	// 2. Mel-Spectrogram
 	melSpec := audio.MelSpectrogram(stft, numMelFilters, windowSize, sampleRate, 0, float64(sampleRate/2))
 
-	// 3. Flatten into Tensor and apply Log-scaling
+	// 3. Reshape into 3D Tensor [1, numFrames, numMelFilters] and apply Log-scaling
 	numFrames := len(melSpec)
-	inputSize := numFrames * numMelFilters
-	tensor := model.NewTensor([]int{inputSize})
+	tensor := model.NewTensor([]int{1, numFrames, numMelFilters})
 
 	for i := 0; i < numFrames; i++ {
 		for j := 0; j < numMelFilters; j++ {
-			// Apply Log-scaling: log(1 + 1000*x) to handle small values and dampen high energy
+			// Apply Log-scaling: log(1 + 1000*x)
 			val := melSpec[i][j]
-			tensor.Data[i*numMelFilters+j] = float32(math.Log1p(float64(val) * 1000.0))
+			tensor.Set([]int{0, i, j}, float32(math.Log1p(float64(val)*1000.0)))
 		}
 	}
 

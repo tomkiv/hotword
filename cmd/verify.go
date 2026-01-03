@@ -26,7 +26,7 @@ func NewVerifyCmd() *cobra.Command {
 			threshold := float32(0.5) // Default threshold
 
 			cmd.Printf("Loading model from %s...\n", modelFile)
-			weights, bias, err := model.LoadModel(modelFile)
+			m, err := model.LoadModel(modelFile)
 			if err != nil {
 				return fmt.Errorf("failed to load model: %w", err)
 			}
@@ -43,11 +43,6 @@ func NewVerifyCmd() *cobra.Command {
 				return fmt.Errorf("no samples found in dataset")
 			}
 
-			// Create model instance
-			m := model.NewSequentialModel(
-				model.NewDenseLayer(weights, bias),
-				model.NewSigmoidLayer(),
-			)
 			e := engine.NewEngine(m, 16000)
 
 			var tp, tn, fp, fn int

@@ -40,16 +40,10 @@ func NewListenCmd() *cobra.Command {
 			}
 
 			cmd.Printf("Loading model from %s...\n", modelFile)
-			weights, bias, err := model.LoadModel(modelFile)
+			m, err := model.LoadModel(modelFile)
 			if err != nil {
 				return fmt.Errorf("failed to load model: %w", err)
 			}
-
-			// Create model instance
-			m := model.NewSequentialModel(
-				model.NewDenseLayer(weights, bias),
-				model.NewSigmoidLayer(),
-			)
 
 			sampleRate := 16000
 			e := engine.NewEngine(m, sampleRate)
