@@ -1,2 +1,28 @@
-# Plan: Deep Model Architecture (CNN)\n\n## Phase 1: Core Model Refactor\n## Phase 1: Core Model Refactor
-- [~] Task: Define generic Layer and Model structures\n  - [ ] Implement `Layer` interface in `pkg/model` (Forward, Backward, Params)\n  - [ ] Create `SequentialModel` to manage a slice of layers\n  - [ ] Write unit tests for generic sequential forward pass\n- [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Model Refactor' (Protocol in workflow.md)\n\n## Phase 2: Configuration and Initialization\n- [ ] Task: Implement configuration-based model builder\n  - [ ] Add logic to parse layer definitions from `config.yaml`\n  - [ ] Implement Xavier/Glorot initialization for Conv2D and Dense layers\n  - [ ] Write tests for building complex models from YAML snippets\n- [ ] Task: Conductor - User Manual Verification 'Phase 2: Configuration and Initialization' (Protocol in workflow.md)\n\n## Phase 3: Structured Model Persistence\n- [ ] Task: Update binary format for multi-layer support\n  - [ ] Update `SaveModel` to include layer types and shapes in the header\n  - [ ] Update `LoadModel` to dynamically reconstruct the model from the binary\n  - [ ] Write tests for saving/loading multi-layer CNNs\n- [ ] Task: Conductor - User Manual Verification 'Phase 3: Structured Model Persistence' (Protocol in workflow.md)\n\n## Phase 4: Training Pipeline Integration\n- [ ] Task: Update Trainer for multi-layer support\n  - [ ] Refactor `Trainer.TrainStep` to loop through layers for forward and backward passes\n  - [ ] Verify convergence on a multi-layer CNN architecture\n- [ ] Task: Conductor - User Manual Verification 'Phase 4: Training Pipeline Integration' (Protocol in workflow.md)
+# Plan: Deep Model Architecture (CNN)
+
+## Phase 1: Core Model Refactor [checkpoint: c31fe05]
+- [x] Task: Define generic Layer and Model structures (c31fe05)
+  - [x] Implement `Layer` interface in `pkg/model` (Forward, Backward, Params)
+  - [x] Create `SequentialModel` to manage a slice of layers
+  - [x] Write unit tests for generic sequential forward pass
+- [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Model Refactor' (Protocol in workflow.md)
+
+## Phase 2: Configuration and Initialization
+- [x] Task: Implement configuration-based model builder (865305b)
+  - [ ] Add logic to parse layer definitions from `config.yaml`
+  - [ ] Implement Xavier/Glorot initialization for Conv2D and Dense layers
+  - [ ] Write tests for building complex models from YAML snippets
+- [ ] Task: Conductor - User Manual Verification 'Phase 2: Configuration and Initialization' (Protocol in workflow.md)
+
+## Phase 3: Structured Model Persistence
+- [ ] Task: Update binary format for multi-layer support
+  - [ ] Update `SaveModel` to include layer types and shapes in the header
+  - [ ] Update `LoadModel` to dynamically reconstruct the model from the binary
+  - [ ] Write tests for saving/loading multi-layer CNNs
+- [ ] Task: Conductor - User Manual Verification 'Phase 3: Structured Model Persistence' (Protocol in workflow.md)
+
+## Phase 4: Training Pipeline Integration
+- [ ] Task: Update Trainer for multi-layer support
+  - [ ] Refactor `Trainer.TrainStep` to loop through layers for forward and backward passes
+  - [ ] Verify convergence on a multi-layer CNN architecture
+- [ ] Task: Conductor - User Manual Verification 'Phase 4: Training Pipeline Integration' (Protocol in workflow.md)
