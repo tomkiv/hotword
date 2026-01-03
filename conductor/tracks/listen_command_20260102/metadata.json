@@ -1,0 +1,1 @@
+{\n  "track_id": "listen_command_20260102",\n  "type": "feature",\n  "status": "new",\n  "created_at": "2026-01-02T10:00:00Z",\n  "updated_at": "2026-01-02T10:00:00Z",\n  "description": "Implement the 'listen' command to trigger actions upon hotword detection."\n}
