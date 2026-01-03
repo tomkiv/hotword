@@ -1,70 +1,61 @@
 package engine
 
 import (
-	"github.com/vitalii/hotword/pkg/audio"
+	"github.com/vitalii/hotword/pkg/features"
 	"github.com/vitalii/hotword/pkg/model"
 )
 
 // Engine coordinates audio preprocessing and model inference.
 type Engine struct {
-	weights       *model.Tensor
-	bias          []float32
+	model         model.Model
 	sampleRate    int
 	windowSize    int
 	hopSize       int
 	numMelFilters int
-	filterbank    [][]float32
+	windowBuffer  []float32
+	smoothProb    float32
 }
 
 // NewEngine creates a new inference engine.
-func NewEngine(weights *model.Tensor, bias []float32, sampleRate int) *Engine {
-	windowSize := 512
-	hopSize := 256
-	numMelFilters := 40
-	
-	fb := audio.CreateMelFilterbank(numMelFilters, windowSize, sampleRate, 0, float64(sampleRate/2))
-	
+func NewEngine(m model.Model, sampleRate int) *Engine {
 	return &Engine{
-		weights:       weights,
-		bias:          bias,
+		model:         m,
 		sampleRate:    sampleRate,
-		windowSize:    windowSize,
-		hopSize:       hopSize,
-		numMelFilters: numMelFilters,
-		filterbank:    fb,
+		windowSize:    512,
+		hopSize:       256,
+		numMelFilters: 40,
+		windowBuffer:  make([]float32, sampleRate), // 1 second buffer
 	}
 }
 
 // Process handles a chunk of audio samples and returns the hotword probability
 // and a boolean indicating if it exceeded the threshold.
 func (e *Engine) Process(samples []float32, threshold float32) (float32, bool) {
-	// 1. Audio Preprocessing
-	stft := audio.STFT(samples, e.windowSize, e.hopSize)
-	if len(stft) == 0 {
-		return 0, false
-	}
-	
-	melSpec := audio.MelSpectrogram(stft, e.numMelFilters, e.windowSize, e.sampleRate, 0, float64(e.sampleRate/2))
-	
-	// Flatten melSpec into a single Tensor for the Dense layer
-	// In a real scenario, this would involve a CNN first, but for the basic engine,
-	// we'll assume the model is a Dense layer acting on the flattened spectrogram.
-	numFrames := len(melSpec)
-	inputSize := numFrames * e.numMelFilters
-	input := model.NewTensor([]int{inputSize})
-	
-	for i := 0; i < numFrames; i++ {
-		for j := 0; j < e.numMelFilters; j++ {
-			input.Data[i*e.numMelFilters+j] = melSpec[i][j]
-		}
+	// 1. Update sliding window buffer
+	if len(samples) >= len(e.windowBuffer) {
+		copy(e.windowBuffer, samples[len(samples)-len(e.windowBuffer):])
+	} else {
+		copy(e.windowBuffer, e.windowBuffer[len(samples):])
+		copy(e.windowBuffer[len(e.windowBuffer)-len(samples):], samples)
 	}
 
-	// 2. Inference
-	output := model.Dense(input, e.weights, e.bias)
-	
-	// Basic sigmoid-like activation is missing, but model is expected to output probability.
-	// For now, we'll just return the raw output as probability.
-	prob := output.Data[0]
-	
-	return prob, prob >= threshold
+	// 2. Audio Preprocessing (Log-Mel Spectrogram)
+	input := features.Extract(e.windowBuffer, e.sampleRate, e.windowSize, e.hopSize, e.numMelFilters)
+	if input == nil {
+		return 0, false
+	}
+
+	// 3. Inference
+	output := e.model.Forward(input)
+
+	rawProb := output.Data[0]
+
+	// 4. Probability Smoothing (Exponential Moving Average)
+	// alpha determines how fast the smoothed probability updates.
+	// Low alpha (e.g. 0.1) = slow update, high smoothing (good for noise rejection)
+	// High alpha (e.g. 0.9) = fast update, low smoothing
+	const alpha = 0.3
+	e.smoothProb = alpha*rawProb + (1-alpha)*e.smoothProb
+
+	return e.smoothProb, e.smoothProb >= threshold
 }

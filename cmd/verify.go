@@ -43,7 +43,9 @@ func NewVerifyCmd() *cobra.Command {
 				return fmt.Errorf("no samples found in dataset")
 			}
 
-			e := engine.NewEngine(weights, bias, 16000)
+			// Create model instance
+			m := model.NewDenseModel(weights, bias)
+			e := engine.NewEngine(m, 16000)
 
 			var tp, tn, fp, fn int
 			var failedSamples []string

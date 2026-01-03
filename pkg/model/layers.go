@@ -1,5 +1,9 @@
 package model
 
+import (
+	"math"
+)
+
 // Conv2D performs a 2D convolution operation.
 // input: [channels, height, width]
 // weights: [num_filters, input_channels, kernel_height, kernel_width]
@@ -53,6 +57,15 @@ func ReLU(input *Tensor) *Tensor {
 		} else {
 			output.Data[i] = 0
 		}
+	}
+	return output
+}
+
+// Sigmoid applies the sigmoid activation function to the input tensor.
+func Sigmoid(input *Tensor) *Tensor {
+	output := NewTensor(input.Shape)
+	for i, val := range input.Data {
+		output.Data[i] = 1.0 / (1.0 + float32(math.Exp(float64(-val))))
 	}
 	return output
 }

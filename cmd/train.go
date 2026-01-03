@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -46,21 +49,27 @@ func NewTrainCmd() *cobra.Command {
 				return fmt.Errorf("no samples found in dataset")
 			}
 
+			// Shuffle dataset
+			rand.Seed(time.Now().UnixNano())
+			rand.Shuffle(len(ds.Samples), func(i, j int) {
+				ds.Samples[i], ds.Samples[j] = ds.Samples[j], ds.Samples[i]
+			})
+
 			// Define feature extractor
 			extractor := func(samples []float32) *model.Tensor {
 				return features.Extract(samples, sampleRate, windowSize, hopSize, numMelFilters)
 			}
 
-			// Initialize model weights (assume 1 second samples for sizing)
-			// (16000 - 512) / 256 + 1 = 61 frames
-			// 61 * 40 = 2440
-			// Use the first sample to determine size dynamically
+			// Initialize model weights with Xavier/Glorot initialization
 			firstFeatures := extractor(ds.Samples[0].Audio)
 			inputSize := len(firstFeatures.Data)
 			
+			// Xavier init scale: sqrt(6 / (in + out))
+			scale := float32(math.Sqrt(6.0 / float64(inputSize+1)))
+			
 			weights := model.NewTensor([]int{1, inputSize})
 			for i := range weights.Data {
-				weights.Data[i] = 0.01 // Simple init
+				weights.Data[i] = (rand.Float32()*2.0 - 1.0) * scale
 			}
 			bias := make([]float32, 1)
 

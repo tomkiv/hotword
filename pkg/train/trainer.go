@@ -25,16 +25,19 @@ func NewTrainer(weights *model.Tensor, bias []float32, lr float32) *Trainer {
 // Returns the loss before the update.
 func (t *Trainer) TrainStep(input *model.Tensor, target float32) float32 {
 	// 1. Forward Pass
-	output := model.Dense(input, t.weights, t.bias)
+	logits := model.Dense(input, t.weights, t.bias)
+	output := model.Sigmoid(logits)
 	prediction := output.Data[0]
 
 	// 2. Calculate Loss
 	loss := model.BCELoss([]float32{prediction}, []float32{target})
 
 	// 3. Backward Pass
-	// gradLoss = dL/dy
-	gradLoss := model.BCEGradient([]float32{prediction}, []float32{target})
-	gradOutput := &model.Tensor{Data: gradLoss, Shape: []int{1}}
+	// Numerically stable gradient for BCE + Sigmoid is simply (prediction - target)
+	// dL/dz = prediction - target, where z is the logit.
+	gradLogits := []float32{prediction - target}
+	
+	gradOutput := &model.Tensor{Data: gradLogits, Shape: []int{1}}
 
 	_, gradWeights, gradBias := model.DenseBackward(input, t.weights, t.bias, gradOutput)
 
