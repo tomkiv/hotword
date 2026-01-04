@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/vitalii/hotword/pkg/audio"
 	"github.com/vitalii/hotword/pkg/features"
 	"github.com/vitalii/hotword/pkg/model"
 )
@@ -8,6 +9,7 @@ import (
 // Engine coordinates audio preprocessing and model inference.
 type Engine struct {
 	model           model.Model
+	vad             *audio.VAD
 	sampleRate      int
 	windowSize      int
 	hopSize         int
@@ -21,13 +23,20 @@ type Engine struct {
 // NewEngine creates a new inference engine.
 func NewEngine(m model.Model, sampleRate int) *Engine {
 	return &Engine{
-		model:         m,
+		model: m,
+		// Default VAD settings (can be calibrated via CLI later)
+		vad:           audio.NewVAD(0.01, 0.5, 300),
 		sampleRate:    sampleRate,
 		windowSize:    512,
 		hopSize:       256,
 		numMelFilters: 40,
 		windowBuffer:  make([]float32, sampleRate), // 1 second buffer
 	}
+}
+
+// SetVAD updates the VAD configuration for the engine.
+func (e *Engine) SetVAD(v *audio.VAD) {
+	e.vad = v
 }
 
 // Reset clears the engine's state, resetting the probability smoother and buffer.
@@ -95,6 +104,20 @@ func (e *Engine) ProcessDebug(samples []float32, threshold float32) DebugInfo {
 
 	// 2. Check warmup
 	warmupComplete := e.samplesIngested >= e.sampleRate
+
+	// 2.1 VAD Check (Gatekeeper)
+	// We check the incoming chunk for speech activity
+	if !e.vad.IsSpeech(samples) {
+		// If no speech and not warming up, skip heavy NN forward pass
+		if warmupComplete {
+			e.smoothProb = e.smoothProb * 0.5 // Fast decay
+			e.consecutiveHigh = 0
+			return DebugInfo{
+				WarmupComplete: true,
+				SamplesIngested: e.samplesIngested,
+			}
+		}
+	}
 
 	// 3. Audio Preprocessing
 	input := features.Extract(e.windowBuffer, e.sampleRate, e.windowSize, e.hopSize, e.numMelFilters)
