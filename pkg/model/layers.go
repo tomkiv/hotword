@@ -25,6 +25,12 @@ func (l *Conv2DLayer) Forward(input *Tensor) *Tensor {
 	return Conv2D(input, l.Weights, l.Bias, l.Stride, l.Padding)
 }
 
+func (l *Conv2DLayer) ForwardStateful(input *Tensor) *Tensor {
+	return l.Forward(input)
+}
+
+func (l *Conv2DLayer) ResetState() {}
+
 func (l *Conv2DLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	return Conv2DBackward(input, l.Weights, l.Bias, gradOutput, l.Stride, l.Padding)
 }
@@ -53,6 +59,12 @@ func (l *ReLULayer) Forward(input *Tensor) *Tensor {
 	return ReLU(input)
 }
 
+func (l *ReLULayer) ForwardStateful(input *Tensor) *Tensor {
+	return l.Forward(input)
+}
+
+func (l *ReLULayer) ResetState() {}
+
 func (l *ReLULayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	return ReLUBackward(input, gradOutput), nil, nil
 }
@@ -77,6 +89,12 @@ func NewSigmoidLayer() *SigmoidLayer {
 func (l *SigmoidLayer) Forward(input *Tensor) *Tensor {
 	return Sigmoid(input)
 }
+
+func (l *SigmoidLayer) ForwardStateful(input *Tensor) *Tensor {
+	return l.Forward(input)
+}
+
+func (l *SigmoidLayer) ResetState() {}
 
 func (l *SigmoidLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	// gradInput = gradOutput * Sigmoid(input) * (1 - Sigmoid(input))
@@ -115,6 +133,12 @@ func (l *MaxPool2DLayer) Forward(input *Tensor) *Tensor {
 	return MaxPool2D(input, l.KernelSize, l.Stride)
 }
 
+func (l *MaxPool2DLayer) ForwardStateful(input *Tensor) *Tensor {
+	return l.Forward(input)
+}
+
+func (l *MaxPool2DLayer) ResetState() {}
+
 func (l *MaxPool2DLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	return MaxPool2DBackward(input, gradOutput, l.KernelSize, l.Stride), nil, nil
 }
@@ -145,6 +169,12 @@ func NewDenseLayer(weights *Tensor, bias []float32) *DenseLayer {
 func (l *DenseLayer) Forward(input *Tensor) *Tensor {
 	return Dense(input, l.Weights, l.Bias)
 }
+
+func (l *DenseLayer) ForwardStateful(input *Tensor) *Tensor {
+	return l.Forward(input)
+}
+
+func (l *DenseLayer) ResetState() {}
 
 func (l *DenseLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	return DenseBackward(input, l.Weights, l.Bias, gradOutput)

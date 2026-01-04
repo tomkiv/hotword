@@ -129,9 +129,10 @@ func sqrt64(x float64) float64 {
 	return z
 }
 
-// cropToOnset extracts a window of targetLen samples starting from the detected onset.
+// CropToOnset extracts a window of targetLen samples starting from the detected onset.
 // If there's not enough audio after onset, pads with zeros.
-func cropToOnset(audioData []float32, sampleRate, targetLen int, threshold float32) []float32 {
+// This function is exported for use in predict command.
+func CropToOnset(audioData []float32, sampleRate, targetLen int, threshold float32) []float32 {
 	// Find onset with 50ms lead time
 	leadTimeSamples := sampleRate / 20 // 50ms
 	onsetIdx := findOnset(audioData, sampleRate, threshold, leadTimeSamples)
@@ -521,7 +522,7 @@ func loadFromDirWithOnset(dir string, isHotword bool, targetLen, sampleRate int,
 			}
 
 			// Use onset detection to crop the audio
-			cropped := cropToOnset(audioData, sampleRate, targetLen, threshold)
+			cropped := CropToOnset(audioData, sampleRate, targetLen, threshold)
 
 			samples = append(samples, Sample{
 				Audio:     cropped,

@@ -39,6 +39,7 @@ func (e *Engine) Reset() {
 	e.consecutiveHigh = 0
 	e.samplesIngested = 0
 	e.windowBuffer = make([]float32, e.sampleRate)
+	e.model.ResetState()
 	// Fill with low-level noise to mimic ambient silence
 	for i := range e.windowBuffer {
 		// Low amplitude pseudo-random noise using a simple formula
@@ -73,7 +74,7 @@ func (e *Engine) ProcessSingle(samples []float32) float32 {
 	}
 
 	// Inference - return raw probability
-	output := e.model.Forward(input)
+	output := e.model.ForwardStateful(input)
 	return output.Data[0]
 }
 
@@ -102,7 +103,7 @@ func (e *Engine) ProcessDebug(samples []float32, threshold float32) DebugInfo {
 	}
 
 	// 4. Inference
-	output := e.model.Forward(input)
+	output := e.model.ForwardStateful(input)
 	rawProb := output.Data[0]
 
 	// 5. Probability Smoothing

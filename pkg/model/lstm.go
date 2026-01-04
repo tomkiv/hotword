@@ -14,6 +14,10 @@ type LSTMLayer struct {
 	InputSize  int
 	HiddenSize int
 
+	// Stateful inference
+	hiddenState []float32
+	cellState   []float32
+
 	lastInput          *Tensor
 	originalInputShape []int
 	hSeq, cSeq         []*Tensor
@@ -52,6 +56,27 @@ func NewLSTMLayer(inputSize, hiddenSize int) *LSTMLayer {
 }
 
 func (l *LSTMLayer) Forward(input *Tensor) *Tensor {
+	return l.forwardInternal(input, nil, nil)
+}
+
+func (l *LSTMLayer) ForwardStateful(input *Tensor) *Tensor {
+	if l.hiddenState == nil {
+		l.hiddenState = make([]float32, l.HiddenSize)
+		l.cellState = make([]float32, l.HiddenSize)
+	}
+	out := l.forwardInternal(input, l.hiddenState, l.cellState)
+	copy(l.hiddenState, out.Data)
+	// We need to capture the cell state from the last timestep of the internal forward pass
+	copy(l.cellState, l.cSeq[len(l.cSeq)-1].Data)
+	return out
+}
+
+func (l *LSTMLayer) ResetState() {
+	l.hiddenState = nil
+	l.cellState = nil
+}
+
+func (l *LSTMLayer) forwardInternal(input *Tensor, initialH, initialC []float32) *Tensor {
 	var flatInput *Tensor
 	var seqLen int
 
@@ -83,7 +108,13 @@ func (l *LSTMLayer) Forward(input *Tensor) *Tensor {
 	l.gSeq = make([]*Tensor, seqLen)
 
 	l.hSeq[0] = NewTensor([]int{l.HiddenSize})
+	if initialH != nil {
+		copy(l.hSeq[0].Data, initialH)
+	}
 	l.cSeq[0] = NewTensor([]int{l.HiddenSize})
+	if initialC != nil {
+		copy(l.cSeq[0].Data, initialC)
+	}
 
 	inputDim := flatInput.Shape[1]
 

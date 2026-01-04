@@ -17,6 +17,9 @@ type GRULayer struct {
 	InputSize  int
 	HiddenSize int
 
+	// Stateful inference
+	hiddenState []float32
+
 	// Cached values for backward pass
 	lastInput          *Tensor
 	originalInputShape []int     // Store original 3D shape for reshaping gradient
@@ -72,6 +75,25 @@ func NewGRULayer(inputSize, hiddenSize int) *GRULayer {
 // Input shape: [seqLen, inputSize]
 // Output: final hidden state [hiddenSize]
 func (g *GRULayer) Forward(input *Tensor) *Tensor {
+	return g.forwardInternal(input, nil)
+}
+
+// ForwardStateful processes a sequence maintaining internal hidden state.
+func (g *GRULayer) ForwardStateful(input *Tensor) *Tensor {
+	if g.hiddenState == nil {
+		g.hiddenState = make([]float32, g.HiddenSize)
+	}
+	out := g.forwardInternal(input, g.hiddenState)
+	copy(g.hiddenState, out.Data)
+	return out
+}
+
+// ResetState clears the recurrent hidden state.
+func (g *GRULayer) ResetState() {
+	g.hiddenState = nil
+}
+
+func (g *GRULayer) forwardInternal(input *Tensor, initialH []float32) *Tensor {
 	// Flatten input if it's 3D (from CNN output)
 	var flatInput *Tensor
 	var seqLen int
@@ -109,6 +131,9 @@ func (g *GRULayer) Forward(input *Tensor) *Tensor {
 
 	// Initialize hidden state
 	h := make([]float32, g.HiddenSize)
+	if initialH != nil {
+		copy(h, initialH)
+	}
 
 	// Store sequences for backward pass
 	g.hiddenSeq = make([]*Tensor, seqLen+1)

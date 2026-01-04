@@ -15,6 +15,12 @@ func (l *MockCopyLayer) Forward(input *model.Tensor) *model.Tensor {
 	return model.Dense(input, l.weights, l.bias)
 }
 
+func (l *MockCopyLayer) ForwardStateful(input *model.Tensor) *model.Tensor {
+	return l.Forward(input)
+}
+
+func (l *MockCopyLayer) ResetState() {}
+
 func (l *MockCopyLayer) Backward(input, gradOutput *model.Tensor) (*model.Tensor, *model.Tensor, []float32) {
 	return model.DenseBackward(input, l.weights, l.bias, gradOutput)
 }

@@ -13,6 +13,7 @@ import (
 
 var verifyModelFile string
 var verifyDataDir string
+var verifyOnset bool
 
 // NewVerifyCmd creates a new verify command
 func NewVerifyCmd() *cobra.Command {
@@ -23,7 +24,10 @@ func NewVerifyCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			modelFile := viper.GetString("verify.model")
 			dataDir := viper.GetString("verify.data")
+			onset := viper.GetBool("verify.onset")
 			threshold := float32(0.5) // Default threshold
+			sampleRate := 16000
+			targetLen := 16000 // 1 second
 
 			cmd.Printf("Loading model from %s...\n", modelFile)
 			m, err := model.LoadModel(modelFile)
@@ -34,7 +38,14 @@ func NewVerifyCmd() *cobra.Command {
 			cmd.Printf("Loading verification dataset from %s...\n", dataDir)
 			hotwordDir := filepath.Join(dataDir, "hotword")
 			backgroundDir := filepath.Join(dataDir, "background")
-			ds, err := train.LoadDataset(hotwordDir, backgroundDir)
+
+			var ds *train.Dataset
+			if onset {
+				cmd.Println("Using onset detection...")
+				ds, err = train.LoadDatasetWithOnset(hotwordDir, backgroundDir, targetLen, sampleRate, 0.1)
+			} else {
+				ds, err = train.LoadDataset(hotwordDir, backgroundDir)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to load dataset: %w", err)
 			}
@@ -94,9 +105,11 @@ func NewVerifyCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&verifyModelFile, "model", "model.bin", "Path to the trained model binary")
 	cmd.Flags().StringVar(&verifyDataDir, "data", "data", "Directory containing 'hotword' and 'background' subdirectories")
+	cmd.Flags().BoolVar(&verifyOnset, "onset", false, "Use onset detection (match training preprocessing)")
 
 	viper.BindPFlag("verify.model", cmd.Flags().Lookup("model"))
 	viper.BindPFlag("verify.data", cmd.Flags().Lookup("data"))
+	viper.BindPFlag("verify.onset", cmd.Flags().Lookup("onset"))
 
 	return cmd
 }

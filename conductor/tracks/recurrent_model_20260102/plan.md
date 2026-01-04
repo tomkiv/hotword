@@ -22,7 +22,7 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Integration and Persistence' (Protocol in workflow.md)
 
 ## Phase 4: Stateful Inference Engine
-- [ ] Task: Implement stateful recurrent inference
+- [~] Task: Implement stateful recurrent inference
   - [ ] Update `model.Model` and `Layer` interfaces to support stateful operations (optional or via type assertion)
   - [ ] Update `Engine` to maintain and pass hidden states for recurrent layers
   - [ ] Verify stateful detection with a real-time hotword test

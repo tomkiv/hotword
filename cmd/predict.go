@@ -9,11 +9,13 @@ import (
 	"github.com/vitalii/hotword/pkg/audio"
 	"github.com/vitalii/hotword/pkg/features"
 	"github.com/vitalii/hotword/pkg/model"
+	"github.com/vitalii/hotword/pkg/train"
 )
 
 var predictFile string
 var predictModel string
 var predictThreshold float32
+var predictOnset bool
 
 // NewPredictCmd creates a new predict command
 func NewPredictCmd() *cobra.Command {
@@ -25,6 +27,7 @@ func NewPredictCmd() *cobra.Command {
 			filePath := viper.GetString("predict.file")
 			modelPath := viper.GetString("predict.model")
 			threshold := float32(viper.GetFloat64("predict.threshold"))
+			onset := viper.GetBool("predict.onset")
 
 			if filePath == "" {
 				return fmt.Errorf("WAV file path is required (use --file)")
@@ -48,10 +51,17 @@ func NewPredictCmd() *cobra.Command {
 				return fmt.Errorf("failed to load WAV data: %w", err)
 			}
 
-			// 3. Normalize to 1 second
+			// 3. Normalize to 1 second (with optional onset detection)
 			const targetLength = 16000
-			normalized := make([]float32, targetLength)
-			copy(normalized, samples)
+			var normalized []float32
+
+			if onset {
+				cmd.Println("Using onset detection...")
+				normalized = train.CropToOnset(samples, int(sampleRate), targetLength, 0.1)
+			} else {
+				normalized = make([]float32, targetLength)
+				copy(normalized, samples)
+			}
 
 			// 4. Extract Features
 			// Note: We use the same parameters as training/verification
@@ -74,6 +84,9 @@ func NewPredictCmd() *cobra.Command {
 
 			cmd.Printf("File: %s\n", filePath)
 			cmd.Printf("Metadata: Sample Rate=%dHz, Duration=%.2fs\n", sampleRate, duration)
+			if onset {
+				cmd.Printf("Preprocessing: Onset detection enabled\n")
+			}
 			cmd.Printf("--------------------\n")
 			cmd.Printf("Confidence: %.4f\n", confidence)
 			cmd.Printf("Verdict:    %s (Threshold: %.2f)\n", verdict, threshold)
@@ -85,10 +98,12 @@ func NewPredictCmd() *cobra.Command {
 	cmd.Flags().StringVar(&predictFile, "file", "", "Path to the WAV file to test")
 	cmd.Flags().StringVar(&predictModel, "model", "model.bin", "Path to the trained model binary")
 	cmd.Flags().Float32Var(&predictThreshold, "threshold", 0.5, "Confidence threshold for detection")
+	cmd.Flags().BoolVar(&predictOnset, "onset", false, "Use onset detection (match training preprocessing)")
 
 	viper.BindPFlag("predict.file", cmd.Flags().Lookup("file"))
 	viper.BindPFlag("predict.model", cmd.Flags().Lookup("model"))
 	viper.BindPFlag("predict.threshold", cmd.Flags().Lookup("threshold"))
+	viper.BindPFlag("predict.onset", cmd.Flags().Lookup("onset"))
 
 	return cmd
 }
