@@ -56,6 +56,8 @@ func (t *Trainer) TrainStep(input *model.Tensor, target float32) float32 {
 			weights, bias := layers[i].Params()
 			model.SGDUpdate(weights, gradWeights, t.learningRate)
 			model.SGDBiasUpdate(bias, gradBias, t.learningRate)
+			// Push updated params back to the layer (essential for GRU/LSTM which return copies)
+			layers[i].SetParams(weights, bias)
 		}
 
 		grad = gradInput
