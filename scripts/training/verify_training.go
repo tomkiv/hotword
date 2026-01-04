@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/vitalii/hotword/pkg/audio"
-	"github.com/vitalii/hotword/pkg/model"
-	"github.com/vitalii/hotword/pkg/train"
+	"github.com/tomkiv/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/train"
 )
 
 func main() {
@@ -58,7 +58,12 @@ extractor := func(samples []float32) *model.Tensor {
 	}
 	bias := []float32{0.0}
 	
-trainer := train.NewTrainer(weights, bias, 0.01)
+	m := model.NewSequentialModel(
+		model.NewDenseLayer(weights, bias),
+		model.NewSigmoidLayer(),
+	)
+	
+	trainer := train.NewTrainer(m, 0.01)
 
 	// 4. Run Training
 	fmt.Println("Running training for 5 epochs...")

@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 func TestVerifyIntegration(t *testing.T) {

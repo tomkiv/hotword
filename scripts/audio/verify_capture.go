@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/vitalii/hotword/pkg/audio/capture"
+	"github.com/tomkiv/hotword/pkg/audio/capture"
 )
 
 func main() {

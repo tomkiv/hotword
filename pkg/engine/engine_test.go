@@ -2,7 +2,7 @@ package engine
 
 import (
 	"testing"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 func TestEngine(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/vitalii/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/audio"
 )
 
 // Sample represents a single training sample.

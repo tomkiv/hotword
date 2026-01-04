@@ -2,7 +2,7 @@ package train
 
 import (
 	"testing"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 // MockCopyLayer returns copies of its parameters instead of pointers.

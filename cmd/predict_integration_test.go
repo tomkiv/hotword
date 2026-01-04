@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 func TestPredictIntegration(t *testing.T) {

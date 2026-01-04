@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/vitalii/hotword/pkg/audio"
-	"github.com/vitalii/hotword/pkg/audio/capture"
-	"github.com/vitalii/hotword/pkg/engine"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/audio/capture"
+	"github.com/tomkiv/hotword/pkg/engine"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 var listenAction string

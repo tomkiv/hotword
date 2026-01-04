@@ -1,4 +1,4 @@
-module github.com/vitalii/hotword
+module github.com/tomkiv/hotword
 
 go 1.25.5
 

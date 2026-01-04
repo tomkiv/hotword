@@ -1,9 +1,9 @@
 package engine
 
 import (
-	"github.com/vitalii/hotword/pkg/audio"
-	"github.com/vitalii/hotword/pkg/features"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/features"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 // Engine coordinates audio preprocessing and model inference.

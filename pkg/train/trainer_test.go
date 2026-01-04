@@ -2,7 +2,7 @@ package train
 
 import (
 	"testing"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 func TestTrainerStep(t *testing.T) {

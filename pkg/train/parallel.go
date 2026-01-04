@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 // ParallelTrainer manages training across multiple CPU cores by sharding the dataset.

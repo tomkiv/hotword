@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/vitalii/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/audio"
 )
 
 // AugmentorConfig defines the parameters for dynamic data augmentation.

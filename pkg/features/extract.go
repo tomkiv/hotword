@@ -3,8 +3,8 @@ package features
 import (
 	"math"
 
-	"github.com/vitalii/hotword/pkg/audio"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 // Extract converts raw audio samples into a flattened Mel-Spectrogram feature tensor.

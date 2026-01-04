@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"github.com/vitalii/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/audio"
 )
 
 func main() {

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 func numericalGradient(f func() float32, p *float32) float32 {

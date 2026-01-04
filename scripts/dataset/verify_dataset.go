@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"github.com/vitalii/hotword/pkg/train"
+	"github.com/tomkiv/hotword/pkg/train"
 )
 
 func main() {

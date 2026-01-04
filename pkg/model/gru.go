@@ -453,7 +453,7 @@ func (g *GRULayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []floa
 
 	// If original input was 3D, reshape gradient back to 3D
 	var finalGradInput *Tensor
-	if g.originalInputShape != nil && len(g.originalInputShape) == 3 {
+	if len(g.originalInputShape) == 3 {
 		channels := g.originalInputShape[0]
 		height := g.originalInputShape[1]
 		width := g.originalInputShape[2]

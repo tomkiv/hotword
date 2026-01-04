@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/vitalii/hotword/pkg/features"
-	"github.com/vitalii/hotword/pkg/model"
-	"github.com/vitalii/hotword/pkg/train"
+	"github.com/tomkiv/hotword/pkg/features"
+	"github.com/tomkiv/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/train"
 )
 
 var trainDataDir string

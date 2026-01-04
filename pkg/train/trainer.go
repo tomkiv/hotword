@@ -3,7 +3,7 @@ package train
 import (
 	"fmt"
 
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 // AugmentorTrainer is an interface for trainers that support dynamic augmentation.

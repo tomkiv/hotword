@@ -38,18 +38,18 @@ func NewLSTMLayer(inputSize, hiddenSize int) *LSTMLayer {
 	}
 
 	return &LSTMLayer{
-		Wi: initW(hiddenSize, inputSize, scale),
-		Wf: initW(hiddenSize, inputSize, scale),
-		Wo: initW(hiddenSize, inputSize, scale),
-		Wg: initW(hiddenSize, inputSize, scale),
-		Ui: initW(hiddenSize, hiddenSize, hScale),
-		Uf: initW(hiddenSize, hiddenSize, hScale),
-		Uo: initW(hiddenSize, hiddenSize, hScale),
-		Ug: initW(hiddenSize, hiddenSize, hScale),
-		Bi: make([]float32, hiddenSize),
-		Bf: make([]float32, hiddenSize),
-		Bo: make([]float32, hiddenSize),
-		Bg: make([]float32, hiddenSize),
+		Wi:         initW(hiddenSize, inputSize, scale),
+		Wf:         initW(hiddenSize, inputSize, scale),
+		Wo:         initW(hiddenSize, inputSize, scale),
+		Wg:         initW(hiddenSize, inputSize, scale),
+		Ui:         initW(hiddenSize, hiddenSize, hScale),
+		Uf:         initW(hiddenSize, hiddenSize, hScale),
+		Uo:         initW(hiddenSize, hiddenSize, hScale),
+		Ug:         initW(hiddenSize, hiddenSize, hScale),
+		Bi:         make([]float32, hiddenSize),
+		Bf:         make([]float32, hiddenSize),
+		Bo:         make([]float32, hiddenSize),
+		Bg:         make([]float32, hiddenSize),
 		InputSize:  inputSize,
 		HiddenSize: hiddenSize,
 	}
@@ -122,7 +122,7 @@ func (l *LSTMLayer) forwardInternal(input *Tensor, initialH, initialC []float32)
 		xt := flatInput.Data[t*inputDim : (t+1)*inputDim]
 		h := l.hSeq[t].Data
 		c := l.cSeq[t].Data
-		
+
 		iG, fG, oG, gG := make([]float32, l.HiddenSize), make([]float32, l.HiddenSize), make([]float32, l.HiddenSize), make([]float32, l.HiddenSize)
 
 		for j := 0; j < l.HiddenSize; j++ {
@@ -227,7 +227,7 @@ func (l *LSTMLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []flo
 		finalGradInput := NewTensor(l.originalInputShape)
 		c, h, w := l.originalInputShape[0], l.originalInputShape[1], l.originalInputShape[2]
 		for t := 0; t < h; t++ {
-			for ci := 0; c < c; ci++ { // Bug in var name fixed here
+			for ci := 0; ci < c; ci++ { // Bug in var name fixed here
 				for wi := 0; wi < w; wi++ {
 					finalGradInput.Data[ci*h*w+t*w+wi] = dInput.Data[t*(c*w)+ci*w+wi]
 				}

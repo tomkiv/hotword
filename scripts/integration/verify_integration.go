@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/vitalii/hotword/pkg/audio"
-	"github.com/vitalii/hotword/pkg/engine"
-	"github.com/vitalii/hotword/pkg/model"
+	"github.com/tomkiv/hotword/pkg/audio"
+	"github.com/tomkiv/hotword/pkg/engine"
+	"github.com/tomkiv/hotword/pkg/model"
 )
 
 func main() {
@@ -29,7 +29,10 @@ func main() {
 	bias := []float32{0.1}
 
 	// 2. Initialize Engine
-	m := model.NewDenseModel(weights, bias)
+	m := model.NewSequentialModel(
+		model.NewDenseLayer(weights, bias),
+		model.NewSigmoidLayer(),
+	)
 	e := engine.NewEngine(m, sampleRate)
 
 	// 3. Initialize Sliding Window
