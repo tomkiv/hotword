@@ -18,3 +18,32 @@ func MixNoise(signal, noise []float32, noiseRatio float32) []float32 {
 
 	return mixed
 }
+
+// Shift performs a circular shift on the provided samples.
+func Shift(samples []float32, offset int) []float32 {
+	n := len(samples)
+	if n == 0 {
+		return samples
+	}
+
+	// Normalize offset to [0, n)
+	offset = offset % n
+	if offset < 0 {
+		offset += n
+	}
+
+	out := make([]float32, n)
+	for i := 0; i < n; i++ {
+		out[(i+offset)%n] = samples[i]
+	}
+	return out
+}
+
+// Scale multiplies the amplitude of the signal by the provided gain.
+func Scale(samples []float32, gain float32) []float32 {
+	out := make([]float32, len(samples))
+	for i, s := range samples {
+		out[i] = s * gain
+	}
+	return out
+}

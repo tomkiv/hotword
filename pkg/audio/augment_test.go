@@ -38,3 +38,39 @@ func TestMixNoise(t *testing.T) {
 		}
 	})
 }
+
+func TestShift(t *testing.T) {
+	samples := []float32{1, 2, 3, 4, 5}
+	
+	t.Run("Forward Shift", func(t *testing.T) {
+		shifted := Shift(samples, 2)
+		expected := []float32{4, 5, 1, 2, 3}
+		for i := range shifted {
+			if shifted[i] != expected[i] {
+				t.Errorf("At index %d: expected %f, got %f", i, expected[i], shifted[i])
+			}
+		}
+	})
+
+	t.Run("Backward Shift", func(t *testing.T) {
+		shifted := Shift(samples, -1)
+		expected := []float32{2, 3, 4, 5, 1}
+		for i := range shifted {
+			if shifted[i] != expected[i] {
+				t.Errorf("At index %d: expected %f, got %f", i, expected[i], shifted[i])
+			}
+		}
+	})
+}
+
+func TestScale(t *testing.T) {
+	samples := []float32{1.0, -1.0, 0.5}
+	scaled := Scale(samples, 0.5)
+	expected := []float32{0.5, -0.5, 0.25}
+	
+	for i := range scaled {
+		if math.Abs(float64(scaled[i]-expected[i])) > 1e-6 {
+			t.Errorf("At index %d: expected %f, got %f", i, expected[i], scaled[i])
+		}
+	}
+}
