@@ -10,6 +10,7 @@ import (
 type Trainer struct {
 	model        model.Model
 	learningRate float32
+	augmentor    *Augmentor
 }
 
 // NewTrainer creates a new Trainer.
@@ -18,6 +19,11 @@ func NewTrainer(m model.Model, lr float32) *Trainer {
 		model:        m,
 		learningRate: lr,
 	}
+}
+
+// SetAugmentor sets the augmentor for the trainer.
+func (t *Trainer) SetAugmentor(a *Augmentor) {
+	t.augmentor = a
 }
 
 // TrainStep performs a single training iteration on a single sample.
@@ -71,8 +77,15 @@ func (t *Trainer) Train(ds *Dataset, epochs int, featureExtractor func([]float32
 	for epoch := 1; epoch <= epochs; epoch++ {
 		var totalLoss float32
 		for _, sample := range ds.Samples {
+			audioData := sample.Audio
+			
+			// Apply dynamic augmentation only to hotwords
+			if t.augmentor != nil && sample.IsHotword {
+				audioData = t.augmentor.Augment(audioData)
+			}
+
 			// Convert raw audio to features (e.g. Mel-Spectrogram)
-			features := featureExtractor(sample.Audio)
+			features := featureExtractor(audioData)
 
 			target := float32(0.0)
 			if sample.IsHotword {

@@ -20,6 +20,10 @@ var trainLR float32
 var trainStride int
 var trainMaxLen int
 var trainOnset bool
+var trainAugProb float32
+var trainMaxNoise float32
+var trainMaxShift int
+var trainMaxGain float32
 
 // NewTrainCmd creates a new train command
 func NewTrainCmd() *cobra.Command {
@@ -36,6 +40,12 @@ Variable-length input options:
   --onset: Use onset detection to find where hotword starts in each file.
             Automatically crops audio from the detected onset position.
 
+Augmentation options:
+  --augment-prob: Probability of applying random augmentations to hotword samples (0.0 to 1.0).
+  --max-noise: Maximum noise ratio to mix into samples (0.0 to 1.0).
+  --max-shift: Maximum random time shift in milliseconds.
+  --max-gain: Maximum random gain/volume scaling (e.g. 0.2 for 0.8x-1.2x).
+
 If no option is specified, uses legacy mode (first 1 second only).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			data := viper.GetString("train.data")
@@ -45,6 +55,12 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 			stride := viper.GetInt("train.stride")
 			maxLen := viper.GetInt("train.max_len")
 			onset := viper.GetBool("train.onset")
+
+			// Augmentation params
+			augProb := float32(viper.GetFloat64("train.augment_prob"))
+			maxNoise := float32(viper.GetFloat64("train.max_noise"))
+			maxShift := viper.GetInt("train.max_shift")
+			maxGain := float32(viper.GetFloat64("train.max_gain"))
 
 			sampleRate := 16000
 			windowSize := 512
@@ -128,6 +144,27 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 
 			trainer := train.NewTrainer(m, lr)
 
+			// Setup dynamic augmentor if needed
+			if augProb > 0 {
+				cmd.Printf("Using dynamic augmentation (Prob: %.2f, MaxNoise: %.2f, MaxShift: %dms, MaxGain: %.2f)\n", augProb, maxNoise, maxShift, maxGain)
+				
+				// Use background samples from dataset as noise pool
+				var noisePool []train.Sample
+				for _, s := range ds.Samples {
+					if !s.IsHotword {
+						noisePool = append(noisePool, s)
+					}
+				}
+				
+				aug := train.NewAugmentor(train.AugmentorConfig{
+					AugmentProb:   augProb,
+					MaxNoiseRatio: maxNoise,
+					MaxShiftMs:    maxShift,
+					MaxGainScale:  maxGain,
+				}, noisePool)
+				trainer.SetAugmentor(aug)
+			}
+
 			cmd.Printf("Starting training for %d epochs (LR: %f)...\n", epochs, lr)
 			trainer.Train(ds, epochs, extractor)
 
@@ -148,6 +185,10 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 	cmd.Flags().IntVar(&trainStride, "stride", 0, "Window stride in samples for overlapping extraction (e.g., 8000 for 50% overlap)")
 	cmd.Flags().IntVar(&trainMaxLen, "max-len", 0, "Max audio length in samples for padding mode (e.g., 32000 for 2 seconds)")
 	cmd.Flags().BoolVar(&trainOnset, "onset", false, "Use onset detection to crop hotword files from where audio activity starts")
+	cmd.Flags().Float32Var(&trainAugProb, "augment-prob", 0, "Probability of applying random augmentations to hotword samples")
+	cmd.Flags().Float32Var(&trainMaxNoise, "max-noise", 0.2, "Maximum noise ratio to mix into samples")
+	cmd.Flags().IntVar(&trainMaxShift, "max-shift", 100, "Maximum random time shift in milliseconds")
+	cmd.Flags().Float32Var(&trainMaxGain, "max-gain", 0.1, "Maximum random gain/volume scaling")
 
 	viper.BindPFlag("train.data", cmd.Flags().Lookup("data"))
 	viper.BindPFlag("train.out", cmd.Flags().Lookup("out"))
@@ -156,6 +197,10 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 	viper.BindPFlag("train.stride", cmd.Flags().Lookup("stride"))
 	viper.BindPFlag("train.max_len", cmd.Flags().Lookup("max-len"))
 	viper.BindPFlag("train.onset", cmd.Flags().Lookup("onset"))
+	viper.BindPFlag("train.augment_prob", cmd.Flags().Lookup("augment-prob"))
+	viper.BindPFlag("train.max_noise", cmd.Flags().Lookup("max-noise"))
+	viper.BindPFlag("train.max_shift", cmd.Flags().Lookup("max-shift"))
+	viper.BindPFlag("train.max_gain", cmd.Flags().Lookup("max-gain"))
 
 	return cmd
 }
