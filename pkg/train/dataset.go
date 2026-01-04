@@ -387,7 +387,7 @@ func generateNoiseSamples(count, length int) []Sample {
 
 type fileProcessor func(path string) ([]Sample, error)
 
-func parallelLoadFromDir(dir string, isHotword bool, proc fileProcessor, pb *ProgressBar) ([]Sample, error) {
+func parallelLoadFromDir(dir string, proc fileProcessor, pb *ProgressBar) ([]Sample, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -499,7 +499,7 @@ func loadFromDir(dir string, isHotword bool, targetLength int, pb *ProgressBar) 
 			ActualLen: actualLen,
 		}}, nil
 	}
-	return parallelLoadFromDir(dir, isHotword, proc, pb)
+	return parallelLoadFromDir(dir, proc, pb)
 }
 
 // loadFromDirWindowed loads audio files and extracts multiple overlapping windows.
@@ -527,7 +527,7 @@ func loadFromDirWindowed(dir string, isHotword bool, windowLen, stride int, pb *
 		}
 		return samples, nil
 	}
-	return parallelLoadFromDir(dir, isHotword, proc, pb)
+	return parallelLoadFromDir(dir, proc, pb)
 }
 
 // loadFromDirPadded loads audio files with variable length support.
@@ -558,7 +558,7 @@ func loadFromDirPadded(dir string, isHotword bool, maxLen int, pb *ProgressBar) 
 			ActualLen: actualLen,
 		}}, nil
 	}
-	return parallelLoadFromDir(dir, isHotword, proc, pb)
+	return parallelLoadFromDir(dir, proc, pb)
 }
 
 // loadFromDirWithOnset loads audio files using onset detection.
@@ -583,7 +583,7 @@ func loadFromDirWithOnset(dir string, isHotword bool, targetLen, sampleRate int,
 			ActualLen: targetLen,
 		}}, nil
 	}
-	return parallelLoadFromDir(dir, isHotword, proc, pb)
+	return parallelLoadFromDir(dir, proc, pb)
 }
 
 // loadFromDirWithOnsetAndStride combines onset detection with window extraction.
@@ -615,5 +615,5 @@ func loadFromDirWithOnsetAndStride(dir string, isHotword bool, windowLen, stride
 		}
 		return samples, nil
 	}
-	return parallelLoadFromDir(dir, isHotword, proc, pb)
+	return parallelLoadFromDir(dir, proc, pb)
 }
