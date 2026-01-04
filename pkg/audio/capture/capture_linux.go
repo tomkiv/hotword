@@ -27,7 +27,6 @@ int open_pcm(snd_pcm_t **handle, const char *name, unsigned int rate) {
 */
 import "C"
 import (
-	"errors"
 	"fmt"
 	"unsafe"
 )
