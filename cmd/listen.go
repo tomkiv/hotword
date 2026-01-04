@@ -125,11 +125,11 @@ func NewListenCmd() *cobra.Command {
 
 					if debug {
 						// Detailed debug output
-						fmt.Printf("\n[DEBUG] peak=%.4f raw=%.4f smooth=%.4f consec=%d detected=%v\n",
-							peak, info.RawProb, info.SmoothProb, info.ConsecutiveHigh, info.Detected)
+						fmt.Printf("\n[DEBUG] peak=%.4f raw=%.4f smooth=%.4f consec=%d vad=%v detected=%v\n",
+							peak, info.RawProb, info.SmoothProb, info.ConsecutiveHigh, info.VADActive, info.Detected)
 					} else {
 						status := ""
-						if info.RawProb == 0 && info.SmoothProb == 0 && peak >= minPower {
+						if !info.VADActive && peak >= minPower {
 							status = "[VAD: INACTIVE]"
 						}
 						fmt.Printf("\rVU: %s Confidence: %.4f %s | Detections: %d\033[K", bar, confidence, status, detectionCount)

@@ -94,6 +94,7 @@ type DebugInfo struct {
 	ConsecutiveHigh int
 	SamplesIngested int
 	WarmupComplete  bool
+	VADActive       bool
 	Detected        bool
 }
 
@@ -107,14 +108,17 @@ func (e *Engine) ProcessDebug(samples []float32, threshold float32) DebugInfo {
 
 	// 2.1 VAD Check (Gatekeeper)
 	// We check the incoming chunk for speech activity
-	if !e.vad.IsSpeech(samples) {
+	isSpeech := e.vad.IsSpeech(samples)
+	if !isSpeech {
 		// If no speech and not warming up, skip heavy NN forward pass
 		if warmupComplete {
 			e.smoothProb = e.smoothProb * 0.5 // Fast decay
 			e.consecutiveHigh = 0
 			return DebugInfo{
-				WarmupComplete: true,
+				WarmupComplete:  true,
+				VADActive:       false,
 				SamplesIngested: e.samplesIngested,
+				SmoothProb:      e.smoothProb,
 			}
 		}
 	}
@@ -122,7 +126,11 @@ func (e *Engine) ProcessDebug(samples []float32, threshold float32) DebugInfo {
 	// 3. Audio Preprocessing
 	input := features.Extract(e.windowBuffer, e.sampleRate, e.windowSize, e.hopSize, e.numMelFilters)
 	if input == nil {
-		return DebugInfo{}
+		return DebugInfo{
+			WarmupComplete:  warmupComplete,
+			VADActive:       isSpeech,
+			SamplesIngested: e.samplesIngested,
+		}
 	}
 
 	// 4. Inference
@@ -151,6 +159,7 @@ func (e *Engine) ProcessDebug(samples []float32, threshold float32) DebugInfo {
 		ConsecutiveHigh: e.consecutiveHigh,
 		SamplesIngested: e.samplesIngested,
 		WarmupComplete:  warmupComplete,
+		VADActive:       true,
 		Detected:        detected,
 	}
 }
