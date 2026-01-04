@@ -74,9 +74,9 @@ func BuildModelFromConfig(configs []LayerConfig, inputShape []int) (*SequentialM
 			layer = NewDenseLayer(weights, bias)
 			currentShape = []int{cfg.Units}
 
-		case "gru":
-			// GRU expects input from CNN: [channels, height, width]
-			// It will reshape to [height, channels*width] internally
+		case "gru", "lstm":
+			// GRU/LSTM expect input from CNN: [channels, height, width]
+			// They will reshape to [height, channels*width] internally
 			var inputSize int
 			if len(currentShape) == 3 {
 				// From CNN: [channels, height, width]
@@ -84,7 +84,7 @@ func BuildModelFromConfig(configs []LayerConfig, inputShape []int) (*SequentialM
 			} else if len(currentShape) == 1 {
 				inputSize = currentShape[0]
 			} else {
-				return nil, ErrUnsupportedLayer{Type: "gru (invalid input shape)"}
+				return nil, ErrUnsupportedLayer{Type: cfg.Type + " (invalid input shape)"}
 			}
 
 			hiddenSize := cfg.Units
@@ -92,7 +92,11 @@ func BuildModelFromConfig(configs []LayerConfig, inputShape []int) (*SequentialM
 				hiddenSize = 32 // Default hidden size
 			}
 
-			layer = NewGRULayer(inputSize, hiddenSize)
+			if cfg.Type == "gru" {
+				layer = NewGRULayer(inputSize, hiddenSize)
+			} else {
+				layer = NewLSTMLayer(inputSize, hiddenSize)
+			}
 			currentShape = []int{hiddenSize} // Output is just the final hidden state
 
 		default:

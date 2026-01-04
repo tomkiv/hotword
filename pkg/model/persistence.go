@@ -20,6 +20,7 @@ const (
 	LayerTypeMaxPool2D = uint32(4)
 	LayerTypeDense     = uint32(5)
 	LayerTypeGRU       = uint32(6)
+	LayerTypeLSTM      = uint32(7)
 )
 
 func layerToID(l Layer) uint32 {
@@ -36,6 +37,8 @@ func layerToID(l Layer) uint32 {
 		return LayerTypeDense
 	case "gru":
 		return LayerTypeGRU
+	case "lstm":
+		return LayerTypeLSTM
 	default:
 		return 0
 	}
@@ -109,30 +112,38 @@ func SaveModel(path string, m Model) error {
 				return err
 			}
 
-		case LayerTypeGRU:
-			gru := l.(*GRULayer)
-			// Save input/hidden sizes
-			if err := binary.Write(f, binary.LittleEndian, uint32(gru.InputSize)); err != nil {
+		case LayerTypeGRU, LayerTypeLSTM:
+			var inputSize, hiddenSize int
+			var weights []*Tensor
+			var biases [][]float32
+
+			if typeID == LayerTypeGRU {
+				gru := l.(*GRULayer)
+				inputSize, hiddenSize = gru.InputSize, gru.HiddenSize
+				weights = []*Tensor{gru.Wz, gru.Wr, gru.Wh, gru.Uz, gru.Ur, gru.Uh}
+				biases = [][]float32{gru.Bz, gru.Br, gru.Bh}
+			} else {
+				lstm := l.(*LSTMLayer)
+				inputSize, hiddenSize = lstm.InputSize, lstm.HiddenSize
+				weights = []*Tensor{lstm.Wi, lstm.Wf, lstm.Wo, lstm.Wg, lstm.Ui, lstm.Uf, lstm.Uo, lstm.Ug}
+				biases = [][]float32{lstm.Bi, lstm.Bf, lstm.Bo, lstm.Bg}
+			}
+
+			if err := binary.Write(f, binary.LittleEndian, uint32(inputSize)); err != nil {
 				return err
 			}
-			if err := binary.Write(f, binary.LittleEndian, uint32(gru.HiddenSize)); err != nil {
+			if err := binary.Write(f, binary.LittleEndian, uint32(hiddenSize)); err != nil {
 				return err
 			}
-			// Save all weight tensors
-			for _, w := range []*Tensor{gru.Wz, gru.Wr, gru.Wh, gru.Uz, gru.Ur, gru.Uh} {
+			for _, w := range weights {
 				if err := saveTensor(f, w); err != nil {
 					return err
 				}
 			}
-			// Save biases
-			if err := saveBias(f, gru.Bz); err != nil {
-				return err
-			}
-			if err := saveBias(f, gru.Br); err != nil {
-				return err
-			}
-			if err := saveBias(f, gru.Bh); err != nil {
-				return err
+			for _, b := range biases {
+				if err := saveBias(f, b); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -228,32 +239,50 @@ func LoadModel(path string) (Model, error) {
 			}
 			l = NewDenseLayer(w, b)
 
-		case LayerTypeGRU:
+		case LayerTypeGRU, LayerTypeLSTM:
 			var inputSize, hiddenSize uint32
 			binary.Read(f, binary.LittleEndian, &inputSize)
 			binary.Read(f, binary.LittleEndian, &hiddenSize)
 
-			gru := NewGRULayer(int(inputSize), int(hiddenSize))
-
-			// Load weight tensors
-			weights := []*Tensor{gru.Wz, gru.Wr, gru.Wh, gru.Uz, gru.Ur, gru.Uh}
-			for i := range weights {
-				w, err := loadTensor(f)
-				if err != nil {
-					return nil, err
+			var layer Layer
+			if typeID == LayerTypeGRU {
+				gru := NewGRULayer(int(inputSize), int(hiddenSize))
+				weights := []*Tensor{gru.Wz, gru.Wr, gru.Wh, gru.Uz, gru.Ur, gru.Uh}
+				for i := range weights {
+					w, err := loadTensor(f)
+					if err != nil {
+						return nil, err
+					}
+					copy(weights[i].Data, w.Data)
 				}
-				copy(weights[i].Data, w.Data)
+				bz, _ := loadBias(f)
+				br, _ := loadBias(f)
+				bh, _ := loadBias(f)
+				copy(gru.Bz, bz)
+				copy(gru.Br, br)
+				copy(gru.Bh, bh)
+				layer = gru
+			} else {
+				lstm := NewLSTMLayer(int(inputSize), int(hiddenSize))
+				weights := []*Tensor{lstm.Wi, lstm.Wf, lstm.Wo, lstm.Wg, lstm.Ui, lstm.Uf, lstm.Uo, lstm.Ug}
+				for i := range weights {
+					w, err := loadTensor(f)
+					if err != nil {
+						return nil, err
+					}
+					copy(weights[i].Data, w.Data)
+				}
+				bi, _ := loadBias(f)
+				bf, _ := loadBias(f)
+				bo, _ := loadBias(f)
+				bg, _ := loadBias(f)
+				copy(lstm.Bi, bi)
+				copy(lstm.Bf, bf)
+				copy(lstm.Bo, bo)
+				copy(lstm.Bg, bg)
+				layer = lstm
 			}
-
-			// Load biases
-			bz, _ := loadBias(f)
-			br, _ := loadBias(f)
-			bh, _ := loadBias(f)
-			copy(gru.Bz, bz)
-			copy(gru.Br, br)
-			copy(gru.Bh, bh)
-
-			l = gru
+			l = layer
 
 		default:
 			return nil, fmt.Errorf("unknown layer type ID: %d", typeID)
