@@ -6,3 +6,5 @@ data/train/hotword
 data/validate/background
 data/validate/hotword
 data/custom
+.vscode/launch.json
+cmd/model.bin
