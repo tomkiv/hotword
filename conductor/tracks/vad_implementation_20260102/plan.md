@@ -20,6 +20,6 @@
 - [x] Task: Expose VAD parameters via Viper and CLI (7950773)
   - [ ] Add `vad_energy_threshold` and `vad_zcr_threshold` to `config.yaml`
   - [ ] Update `cmd/listen.go` to support VAD configuration flags
-- [x] Task: Implement VAD status in CLI output (7950773)
+- [x] Task: Implement VAD status in CLI output (f33712f)
   - [ ] Add a `[VAD: INACTIVE]` indicator to the listen command status line
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Configuration and CLI' (Protocol in workflow.md)
