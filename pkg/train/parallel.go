@@ -53,6 +53,9 @@ func (p *ParallelTrainer) Train(ds *Dataset, epochs int, featureExtractor func([
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 		var totalLoss float32
+		var completedSamples int
+
+		pb := NewProgressBar(numSamples, fmt.Sprintf("Epoch %d/%d", epoch, epochs))
 
 		// 1. Create local model copies for each shard
 		shardModels := make([]*model.SequentialModel, actualThreads)
@@ -94,6 +97,11 @@ func (p *ParallelTrainer) Train(ds *Dataset, epochs int, featureExtractor func([
 					}
 					
 					shardLoss += trainer.TrainStep(features, target)
+					
+					mu.Lock()
+					completedSamples++
+					pb.Update(completedSamples)
+					mu.Unlock()
 				}
 
 				mu.Lock()
@@ -106,7 +114,8 @@ func (p *ParallelTrainer) Train(ds *Dataset, epochs int, featureExtractor func([
 		// 3. Weight Averaging
 		p.averageWeights(shardModels)
 
-		fmt.Printf("Epoch %d/%d - Loss: %.4f\n", epoch, epochs, totalLoss/float32(numSamples))
+		pb.Finish()
+		fmt.Printf("Average Loss: %.4f\n", totalLoss/float32(numSamples))
 	}
 }
 

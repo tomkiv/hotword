@@ -82,7 +82,10 @@ func (t *Trainer) TrainStep(input *model.Tensor, target float32) float32 {
 func (t *Trainer) Train(ds *Dataset, epochs int, featureExtractor func([]float32) *model.Tensor) {
 	for epoch := 1; epoch <= epochs; epoch++ {
 		var totalLoss float32
-		for _, sample := range ds.Samples {
+		
+		pb := NewProgressBar(len(ds.Samples), fmt.Sprintf("Epoch %d/%d", epoch, epochs))
+		
+		for i, sample := range ds.Samples {
 			audioData := sample.Audio
 			
 			// Apply dynamic augmentation only to hotwords
@@ -100,7 +103,10 @@ func (t *Trainer) Train(ds *Dataset, epochs int, featureExtractor func([]float32
 
 			loss := t.TrainStep(features, target)
 			totalLoss += loss
+			
+			pb.Update(i + 1)
 		}
-		fmt.Printf("Epoch %d/%d - Loss: %.4f\n", epoch, epochs, totalLoss/float32(len(ds.Samples)))
+		pb.Finish()
+		fmt.Printf("Average Loss: %.4f\n", totalLoss/float32(len(ds.Samples)))
 	}
 }
