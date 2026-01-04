@@ -17,29 +17,70 @@ var trainDataDir string
 var trainModelOut string
 var trainEpochs int
 var trainLR float32
+var trainStride int
+var trainMaxLen int
+var trainOnset bool
 
 // NewTrainCmd creates a new train command
 func NewTrainCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "train",
 		Short: "Train a hotword detection model",
-		Long:  `Train a hotword detection model from WAV samples in hotword and background directories.`,
+		Long: `Train a hotword detection model from WAV samples in hotword and background directories.
+
+Variable-length input options:
+  --stride: Extract overlapping 1-second windows with the specified stride (samples).
+            Example: --stride 8000 for 50% overlap at 16kHz.
+  --max-len: Use variable-length mode with padding/masking up to max-len samples.
+            Shorter audio is padded, longer audio truncated from end.
+  --onset: Use onset detection to find where hotword starts in each file.
+            Automatically crops audio from the detected onset position.
+
+If no option is specified, uses legacy mode (first 1 second only).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			data := viper.GetString("train.data")
 			out := viper.GetString("train.out")
 			epochs := viper.GetInt("train.epochs")
 			lr := float32(viper.GetFloat64("train.lr"))
+			stride := viper.GetInt("train.stride")
+			maxLen := viper.GetInt("train.max_len")
+			onset := viper.GetBool("train.onset")
 
 			sampleRate := 16000
 			windowSize := 512
 			hopSize := 256
 			numMelFilters := 40
+			windowLen := 16000 // 1 second at 16kHz
 
 			cmd.Printf("Loading dataset from %s...\n", data)
 			hotwordDir := filepath.Join(data, "hotword")
 			backgroundDir := filepath.Join(data, "background")
-			
-			ds, err := train.LoadDataset(hotwordDir, backgroundDir)
+
+			var ds *train.Dataset
+			var err error
+
+			// Choose loading mode based on flags
+			if onset && stride > 0 {
+				// Combined: Onset detection + Window/Stride extraction
+				cmd.Printf("Using onset detection + windowed loading (stride=%d samples, %.2fs)\n", stride, float64(stride)/float64(sampleRate))
+				ds, err = train.LoadDatasetWithOnsetAndStride(hotwordDir, backgroundDir, windowLen, stride, sampleRate, 0.1)
+			} else if onset {
+				// Option 2: Onset detection mode only
+				cmd.Printf("Using onset detection (threshold=0.1)\n")
+				ds, err = train.LoadDatasetWithOnset(hotwordDir, backgroundDir, windowLen, sampleRate, 0.1)
+			} else if stride > 0 {
+				// Option 1: Window/Stride extraction mode
+				cmd.Printf("Using windowed loading (stride=%d samples, %.2fs)\n", stride, float64(stride)/float64(sampleRate))
+				ds, err = train.LoadDatasetWindowed(hotwordDir, backgroundDir, windowLen, stride)
+			} else if maxLen > 0 {
+				// Option 3: Variable length with padding mode
+				cmd.Printf("Using padded loading (max_len=%d samples, %.2fs)\n", maxLen, float64(maxLen)/float64(sampleRate))
+				ds, err = train.LoadDatasetWithPadding(hotwordDir, backgroundDir, maxLen)
+			} else {
+				// Legacy mode: first 1 second only
+				ds, err = train.LoadDataset(hotwordDir, backgroundDir)
+			}
+
 			if err != nil {
 				return fmt.Errorf("failed to load dataset: %w", err)
 			}
@@ -47,6 +88,8 @@ func NewTrainCmd() *cobra.Command {
 			if len(ds.Samples) == 0 {
 				return fmt.Errorf("no samples found in dataset")
 			}
+
+			cmd.Printf("Loaded %d samples\n", len(ds.Samples))
 
 			// Shuffle dataset
 			rand.Seed(time.Now().UnixNano())
@@ -84,7 +127,7 @@ func NewTrainCmd() *cobra.Command {
 			}
 
 			trainer := train.NewTrainer(m, lr)
-			
+
 			cmd.Printf("Starting training for %d epochs (LR: %f)...\n", epochs, lr)
 			trainer.Train(ds, epochs, extractor)
 
@@ -102,11 +145,17 @@ func NewTrainCmd() *cobra.Command {
 	cmd.Flags().StringVar(&trainModelOut, "out", "model.bin", "Path to save the trained model")
 	cmd.Flags().IntVar(&trainEpochs, "epochs", 10, "Number of training epochs")
 	cmd.Flags().Float32Var(&trainLR, "lr", 0.01, "Learning rate")
+	cmd.Flags().IntVar(&trainStride, "stride", 0, "Window stride in samples for overlapping extraction (e.g., 8000 for 50% overlap)")
+	cmd.Flags().IntVar(&trainMaxLen, "max-len", 0, "Max audio length in samples for padding mode (e.g., 32000 for 2 seconds)")
+	cmd.Flags().BoolVar(&trainOnset, "onset", false, "Use onset detection to crop hotword files from where audio activity starts")
 
 	viper.BindPFlag("train.data", cmd.Flags().Lookup("data"))
 	viper.BindPFlag("train.out", cmd.Flags().Lookup("out"))
 	viper.BindPFlag("train.epochs", cmd.Flags().Lookup("epochs"))
 	viper.BindPFlag("train.lr", cmd.Flags().Lookup("lr"))
+	viper.BindPFlag("train.stride", cmd.Flags().Lookup("stride"))
+	viper.BindPFlag("train.max_len", cmd.Flags().Lookup("max-len"))
+	viper.BindPFlag("train.onset", cmd.Flags().Lookup("onset"))
 
 	return cmd
 }

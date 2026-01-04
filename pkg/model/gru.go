@@ -185,6 +185,130 @@ func (g *GRULayer) Forward(input *Tensor) *Tensor {
 	return &Tensor{Data: h, Shape: []int{g.HiddenSize}}
 }
 
+// ForwardWithMask processes a sequence through the GRU up to actualSeqLen timesteps.
+// This supports variable-length inputs by stopping at the actual sequence length
+// and returning the hidden state at that position (ignoring padded positions).
+// Input shape: [seqLen, inputSize] (same as Forward)
+// actualSeqLen: the actual number of valid timesteps (before padding)
+// Output: hidden state at timestep actualSeqLen-1 [hiddenSize]
+func (g *GRULayer) ForwardWithMask(input *Tensor, actualSeqLen int) *Tensor {
+	// Flatten input if it's 3D (from CNN output)
+	var flatInput *Tensor
+	var seqLen int
+
+	if len(input.Shape) == 3 {
+		// Input is [channels, height, width] - treat height as sequence length
+		g.originalInputShape = input.Shape
+		channels := input.Shape[0]
+		height := input.Shape[1]
+		width := input.Shape[2]
+		seqLen = height
+		featureSize := channels * width
+
+		flatInput = NewTensor([]int{seqLen, featureSize})
+		for t := 0; t < seqLen; t++ {
+			for c := 0; c < channels; c++ {
+				for w := 0; w < width; w++ {
+					srcIdx := c*height*width + t*width + w
+					dstIdx := t*featureSize + c*width + w
+					flatInput.Data[dstIdx] = input.Data[srcIdx]
+				}
+			}
+		}
+	} else if len(input.Shape) == 2 {
+		g.originalInputShape = nil
+		flatInput = input
+		seqLen = input.Shape[0]
+	} else {
+		return nil
+	}
+
+	// Clamp actualSeqLen to valid range
+	if actualSeqLen <= 0 {
+		actualSeqLen = 1
+	}
+	if actualSeqLen > seqLen {
+		actualSeqLen = seqLen
+	}
+
+	g.lastInput = flatInput
+
+	// Initialize hidden state
+	h := make([]float32, g.HiddenSize)
+
+	// Store sequences for backward pass (only up to actualSeqLen)
+	g.hiddenSeq = make([]*Tensor, actualSeqLen+1)
+	g.zSeq = make([]*Tensor, actualSeqLen)
+	g.rSeq = make([]*Tensor, actualSeqLen)
+	g.hCandSeq = make([]*Tensor, actualSeqLen)
+
+	g.hiddenSeq[0] = &Tensor{Data: make([]float32, g.HiddenSize), Shape: []int{g.HiddenSize}}
+	copy(g.hiddenSeq[0].Data, h)
+
+	inputSize := flatInput.Shape[1]
+
+	// Process sequence only up to actualSeqLen (ignore padding)
+	for t := 0; t < actualSeqLen; t++ {
+		xt := flatInput.Data[t*inputSize : (t+1)*inputSize]
+
+		// Update gate: z = sigmoid(Wz*x + Uz*h + bz)
+		z := make([]float32, g.HiddenSize)
+		for i := 0; i < g.HiddenSize; i++ {
+			sum := g.Bz[i]
+			for j := 0; j < inputSize; j++ {
+				sum += g.Wz.Data[i*inputSize+j] * xt[j]
+			}
+			for j := 0; j < g.HiddenSize; j++ {
+				sum += g.Uz.Data[i*g.HiddenSize+j] * h[j]
+			}
+			z[i] = sigmoid32(sum)
+		}
+
+		// Reset gate: r = sigmoid(Wr*x + Ur*h + br)
+		r := make([]float32, g.HiddenSize)
+		for i := 0; i < g.HiddenSize; i++ {
+			sum := g.Br[i]
+			for j := 0; j < inputSize; j++ {
+				sum += g.Wr.Data[i*inputSize+j] * xt[j]
+			}
+			for j := 0; j < g.HiddenSize; j++ {
+				sum += g.Ur.Data[i*g.HiddenSize+j] * h[j]
+			}
+			r[i] = sigmoid32(sum)
+		}
+
+		// Candidate hidden: h_cand = tanh(Wh*x + Uh*(r*h) + bh)
+		hCand := make([]float32, g.HiddenSize)
+		for i := 0; i < g.HiddenSize; i++ {
+			sum := g.Bh[i]
+			for j := 0; j < inputSize; j++ {
+				sum += g.Wh.Data[i*inputSize+j] * xt[j]
+			}
+			for j := 0; j < g.HiddenSize; j++ {
+				sum += g.Uh.Data[i*g.HiddenSize+j] * (r[j] * h[j])
+			}
+			hCand[i] = tanh32(sum)
+		}
+
+		// New hidden state: h = (1-z)*h + z*h_cand
+		newH := make([]float32, g.HiddenSize)
+		for i := 0; i < g.HiddenSize; i++ {
+			newH[i] = (1-z[i])*h[i] + z[i]*hCand[i]
+		}
+
+		// Store for backward pass
+		g.zSeq[t] = &Tensor{Data: z, Shape: []int{g.HiddenSize}}
+		g.rSeq[t] = &Tensor{Data: r, Shape: []int{g.HiddenSize}}
+		g.hCandSeq[t] = &Tensor{Data: hCand, Shape: []int{g.HiddenSize}}
+		g.hiddenSeq[t+1] = &Tensor{Data: newH, Shape: []int{g.HiddenSize}}
+
+		h = newH
+	}
+
+	// Return hidden state at actualSeqLen (not the padded end)
+	return &Tensor{Data: h, Shape: []int{g.HiddenSize}}
+}
+
 // Backward computes gradients for the GRU layer using BPTT.
 func (g *GRULayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []float32) {
 	seqLen := len(g.zSeq)
