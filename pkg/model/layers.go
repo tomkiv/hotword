@@ -2,6 +2,7 @@ package model
 
 import (
 	"math"
+	"sync"
 )
 
 // Conv2DLayer represents a 2D convolutional layer.
@@ -202,7 +203,7 @@ func Conv2D(input, weights *Tensor, bias []float32, stride, padding int) *Tensor
 	inWidth := input.Shape[2]
 
 	numFilters := weights.Shape[0]
-	kernelHeight := weights.Shape[2]	
+	kernelHeight := weights.Shape[2]
 	kernelWidth := weights.Shape[3]
 
 	outHeight := (inHeight+2*padding-kernelHeight)/stride + 1
@@ -210,28 +211,35 @@ func Conv2D(input, weights *Tensor, bias []float32, stride, padding int) *Tensor
 
 	output := NewTensor([]int{numFilters, outHeight, outWidth})
 
-	for f := 0; f < numFilters; f++ {
-		for i := 0; i < outHeight; i++ {
-			for j := 0; j < outWidth; j++ {
-				var sum float32
-				for c := 0; c < inChannels; c++ {
-					for ki := 0; ki < kernelHeight; ki++ {
-						for kj := 0; kj < kernelWidth; kj++ {
-							ii := i*stride - padding + ki
-							jj := j*stride - padding + kj
+	var wg sync.WaitGroup
+	wg.Add(numFilters)
 
-							if ii >= 0 && ii < inHeight && jj >= 0 && jj < inWidth {
-								val := input.Get([]int{c, ii, jj})
-								weight := weights.Get([]int{f, c, ki, kj})
-								sum += val * weight
+	for f := 0; f < numFilters; f++ {
+		go func(f int) {
+			defer wg.Done()
+			for i := 0; i < outHeight; i++ {
+				for j := 0; j < outWidth; j++ {
+					var sum float32
+					for c := 0; c < inChannels; c++ {
+						for ki := 0; ki < kernelHeight; ki++ {
+							for kj := 0; kj < kernelWidth; kj++ {
+								ii := i*stride - padding + ki
+								jj := j*stride - padding + kj
+
+								if ii >= 0 && ii < inHeight && jj >= 0 && jj < inWidth {
+									val := input.Get([]int{c, ii, jj})
+									weight := weights.Get([]int{f, c, ki, kj})
+									sum += val * weight
+								}
 							}
 						}
 					}
+					output.Set([]int{f, i, j}, sum+bias[f])
 				}
-				output.Set([]int{f, i, j}, sum+bias[f])
 			}
-		}
+		}(f)
 	}
+	wg.Wait()
 
 	return output
 }
@@ -269,26 +277,33 @@ func MaxPool2D(input *Tensor, kernelSize, stride int) *Tensor {
 
 	output := NewTensor([]int{channels, outHeight, outWidth})
 
+	var wg sync.WaitGroup
+	wg.Add(channels)
+
 	for c := 0; c < channels; c++ {
-		for i := 0; i < outHeight; i++ {
-			for j := 0; j < outWidth; j++ {
-				var maxVal float32 = -3.402823466e+38 // float32 min
-				
-				for ki := 0; ki < kernelSize; ki++ {
-					for kj := 0; kj < kernelSize; kj++ {
-						ii := i*stride + ki
-						jj := j*stride + kj
-						
-						val := input.Get([]int{c, ii, jj})
-						if val > maxVal {
-							maxVal = val
+		go func(c int) {
+			defer wg.Done()
+			for i := 0; i < outHeight; i++ {
+				for j := 0; j < outWidth; j++ {
+					var maxVal float32 = -3.402823466e+38 // float32 min
+					
+					for ki := 0; ki < kernelSize; ki++ {
+						for kj := 0; kj < kernelSize; kj++ {
+							ii := i*stride + ki
+							jj := j*stride + kj
+							
+							val := input.Get([]int{c, ii, jj})
+							if val > maxVal {
+								maxVal = val
+							}
 						}
 					}
+					output.Set([]int{c, i, j}, maxVal)
 				}
-				output.Set([]int{c, i, j}, maxVal)
 			}
-		}
+		}(c)
 	}
+	wg.Wait()
 
 	return output
 }
@@ -330,12 +345,30 @@ func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (
 	gradWeights := NewTensor(weights.Shape)
 	gradBias := make([]float32, numOutputs)
 
+	var wg sync.WaitGroup
+	wg.Add(numOutputs)
+
+	for i := 0; i < numOutputs; i++ {
+		go func(i int) {
+			defer wg.Done()
+			goi := gradOutput.Data[i]
+			gradBias[i] = goi
+
+			for j := 0; j < expectedInputSize; j++ {
+				gradWeights.Set([]int{i, j}, goi*input.Data[j])
+				// Atomic add not strictly necessary if we shard gradInput, but gradInput is shared across i
+				// To keep it simple and thread-safe, we'll use a temporary buffer per goroutine and sum at the end,
+				// or just parallelize weights and keep input gradient sequential.
+				// For now, let's parallelize weights and bias only to avoid complex sharding.
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Sequential gradInput calculation for thread-safety (can be optimized later)
 	for i := 0; i < numOutputs; i++ {
 		goi := gradOutput.Data[i]
-		gradBias[i] = goi
-
 		for j := 0; j < expectedInputSize; j++ {
-			gradWeights.Set([]int{i, j}, goi*input.Data[j])
 			gradInput.Data[j] += weights.Get([]int{i, j}) * goi
 		}
 	}
@@ -373,22 +406,47 @@ func Conv2DBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor, 
 	gradWeights := NewTensor(weights.Shape)
 	gradBias := make([]float32, numFilters)
 
+	var wg sync.WaitGroup
+	wg.Add(numFilters)
+
+	for f := 0; f < numFilters; f++ {
+		go func(f int) {
+			defer wg.Done()
+			for i := 0; i < outHeight; i++ {
+				for j := 0; j < outWidth; j++ {
+					goVal := gradOutput.Get([]int{f, i, j})
+					gradBias[f] += goVal
+
+					for c := 0; c < inChannels; c++ {
+						for ki := 0; ki < kernelHeight; ki++ {
+							for kj := 0; kj < kernelWidth; kj++ {
+								ii := i*stride - padding + ki
+								jj := j*stride - padding + kj
+
+								if ii >= 0 && ii < inHeight && jj >= 0 && jj < inWidth {
+									inVal := input.Get([]int{c, ii, jj})
+									gradWeights.Data[gradWeights.getIndex([]int{f, c, ki, kj})] += inVal * goVal
+								}
+							}
+						}
+					}
+				}
+			}
+		}(f)
+	}
+	wg.Wait()
+
+	// Sequential gradInput calculation for thread-safety
 	for f := 0; f < numFilters; f++ {
 		for i := 0; i < outHeight; i++ {
 			for j := 0; j < outWidth; j++ {
 				goVal := gradOutput.Get([]int{f, i, j})
-				gradBias[f] += goVal
-
 				for c := 0; c < inChannels; c++ {
 					for ki := 0; ki < kernelHeight; ki++ {
 						for kj := 0; kj < kernelWidth; kj++ {
 							ii := i*stride - padding + ki
 							jj := j*stride - padding + kj
-
 							if ii >= 0 && ii < inHeight && jj >= 0 && jj < inWidth {
-								inVal := input.Get([]int{c, ii, jj})
-								gradWeights.Data[gradWeights.getIndex([]int{f, c, ki, kj})] += inVal * goVal
-
 								wVal := weights.Get([]int{f, c, ki, kj})
 								gradInput.Data[gradInput.getIndex([]int{c, ii, jj})] += wVal * goVal
 							}
