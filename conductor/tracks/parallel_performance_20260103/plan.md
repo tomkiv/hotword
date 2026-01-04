@@ -18,10 +18,10 @@
   - [x] Integrate synchronization at the end of each epoch
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Data-Parallel Trainer' (Protocol in workflow.md) (ec623cf)
 
-## Phase 3: Integration and Benchmarking
+## Phase 3: Integration and Benchmarking [checkpoint: 5041634]
 - [~] Task: Update CLI and Configuration
   - [ ] Add `threads` flag to `cmd/train.go` and `cmd/listen.go`
   - [ ] Update `Trainer` initialization to use `ParallelTrainer` if threads > 1
 - [ ] Task: Performance Benchmarking
   - [ ] Run a full training session on a dummy 1000-sample dataset and report speedup vs sequential
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Integration and Benchmarking' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Integration and Benchmarking' (Protocol in workflow.md) (5041634)
