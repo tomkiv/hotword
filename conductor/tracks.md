@@ -11,4 +11,4 @@ This file tracks all major tracks for the project. Each track has its own detail
 \n---\n\n## [~] Track: Implement recurrent model support (GRU/LSTM) including stateful inference and parameter update fixes.\n*Link: [./conductor/tracks/recurrent_model_20260102/](./conductor/tracks/recurrent_model_20260102/)*
 \n---\n\n## [x] Track: Enhance the training pipeline with dynamic, on-the-fly audio augmentation.\n*Link: [./conductor/tracks/augment_dynamic_20260102/](./conductor/tracks/augment_dynamic_20260102/)*
 \n---\n\n## [x] Track: Implement performance optimizations via multithreading and parallelism.\n*Link: [./conductor/tracks/parallel_performance_20260103/](./conductor/tracks/parallel_performance_20260103/)*
-\n---\n\n## [ ] Track: Improve data loading performance and add dynamic progress UX.\n*Link: [./conductor/tracks/parallel_loading_20260103/](./conductor/tracks/parallel_loading_20260103/)*
+\n---\n\n## [~] Track: Improve data loading performance and add dynamic progress UX.\n*Link: [./conductor/tracks/parallel_loading_20260103/](./conductor/tracks/parallel_loading_20260103/)*
