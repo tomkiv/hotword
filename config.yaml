@@ -5,9 +5,14 @@ train:
   out: model.bin
 
 listen:
-  threshold: 0.7
-  min_power: 0.01
+  model: model.bin
+  threshold: 0.5
   cooldown: 2000
+  min_power: 0.001
+  vad_energy: 0.01
+  vad_zcr: 0.5
+  vad_hangover: 300
+  debug: false
 
 verify:
   model: model.bin

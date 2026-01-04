@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/vitalii/hotword/pkg/audio"
 	"github.com/vitalii/hotword/pkg/audio/capture"
 	"github.com/vitalii/hotword/pkg/engine"
 	"github.com/vitalii/hotword/pkg/model"
@@ -23,6 +24,9 @@ var listenThreshold float32
 var listenCooldown int
 var listenMinPower float32
 var listenDebug bool
+var listenVADEnergy float32
+var listenVADZCR float32
+var listenVADHangover int
 
 // NewListenCmd creates a new listen command
 func NewListenCmd() *cobra.Command {
@@ -37,6 +41,11 @@ func NewListenCmd() *cobra.Command {
 			minPower := float32(viper.GetFloat64("listen.min_power"))
 			debug := viper.GetBool("listen.debug")
 
+			// VAD parameters
+			vadEnergy := float32(viper.GetFloat64("listen.vad_energy"))
+			vadZCR := float32(viper.GetFloat64("listen.vad_zcr"))
+			vadHangover := viper.GetInt("listen.vad_hangover")
+
 			if modelFile == "" {
 				return fmt.Errorf("model file is required (use --model or set in config)")
 			}
@@ -49,6 +58,7 @@ func NewListenCmd() *cobra.Command {
 
 			sampleRate := 16000
 			e := engine.NewEngine(m, sampleRate)
+			e.SetVAD(audio.NewVAD(vadEnergy, vadZCR, vadHangover))
 
 			device, err := capture.Open("default", sampleRate)
 			if err != nil {
@@ -57,6 +67,7 @@ func NewListenCmd() *cobra.Command {
 			defer device.Close()
 
 			cmd.Printf("Listening for hotword (Threshold: %.2f, MinPower: %.4f, Cooldown: %dms)...\n", threshold, minPower, cooldown)
+			cmd.Printf("VAD Gate: Energy > %.4f AND ZCR < %.4f (Hangover: %dms)\n", vadEnergy, vadZCR, vadHangover)
 			cmd.Println("Press Ctrl+C to stop.")
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -90,10 +101,6 @@ func NewListenCmd() *cobra.Command {
 					_, peak := capture.CalculateLevels(samples)
 					bar := capture.GenerateVUBar(peak, 30)
 
-					// We MUST update the engine's sliding window even on silence
-					// so that it has the correct context when sound starts.
-					// However, e.Process currently does both.
-
 					// Skip processing during cooldown
 					if time.Since(lastDetection) < time.Duration(cooldown)*time.Millisecond {
 						fmt.Printf("\rVU: %s [COOLDOWN] Detections: %d\033[K", bar, detectionCount)
@@ -118,10 +125,14 @@ func NewListenCmd() *cobra.Command {
 
 					if debug {
 						// Detailed debug output
-						fmt.Printf("\n[DEBUG] peak=%.4f raw=%.4f smooth=%.4f consec=%d warmup=%v ingested=%d detected=%v\n",
-							peak, info.RawProb, info.SmoothProb, info.ConsecutiveHigh, info.WarmupComplete, info.SamplesIngested, info.Detected)
+						fmt.Printf("\n[DEBUG] peak=%.4f raw=%.4f smooth=%.4f consec=%d detected=%v\n",
+							peak, info.RawProb, info.SmoothProb, info.ConsecutiveHigh, info.Detected)
 					} else {
-						fmt.Printf("\rVU: %s Confidence: %.4f | Detections: %d\033[K", bar, confidence, detectionCount)
+						status := ""
+						if info.RawProb == 0 && info.SmoothProb == 0 && peak >= minPower {
+							status = "[VAD: INACTIVE]"
+						}
+						fmt.Printf("\rVU: %s Confidence: %.4f %s | Detections: %d\033[K", bar, confidence, status, detectionCount)
 					}
 
 					if detected {
@@ -155,6 +166,9 @@ func NewListenCmd() *cobra.Command {
 	cmd.Flags().IntVar(&listenCooldown, "cooldown", 2000, "Cooldown period in milliseconds after detection")
 	cmd.Flags().Float32Var(&listenMinPower, "min-power", 0.001, "Minimum audio power to trigger inference")
 	cmd.Flags().BoolVar(&listenDebug, "debug", false, "Enable debug output showing raw model probabilities")
+	cmd.Flags().Float32Var(&listenVADEnergy, "vad-energy", 0.01, "RMS energy threshold for VAD (speech detection)")
+	cmd.Flags().Float32Var(&listenVADZCR, "vad-zcr", 0.5, "Zero-Crossing Rate threshold for VAD (speech detection)")
+	cmd.Flags().IntVar(&listenVADHangover, "vad-hangover", 300, "VAD hangover period in milliseconds")
 
 	viper.BindPFlag("listen.action", cmd.Flags().Lookup("action"))
 	viper.BindPFlag("listen.script", cmd.Flags().Lookup("script"))
@@ -163,6 +177,9 @@ func NewListenCmd() *cobra.Command {
 	viper.BindPFlag("listen.cooldown", cmd.Flags().Lookup("cooldown"))
 	viper.BindPFlag("listen.min_power", cmd.Flags().Lookup("min-power"))
 	viper.BindPFlag("listen.debug", cmd.Flags().Lookup("debug"))
+	viper.BindPFlag("listen.vad_energy", cmd.Flags().Lookup("vad-energy"))
+	viper.BindPFlag("listen.vad_zcr", cmd.Flags().Lookup("vad-zcr"))
+	viper.BindPFlag("listen.vad_hangover", cmd.Flags().Lookup("vad-hangover"))
 
 	return cmd
 }
