@@ -1,0 +1,1 @@
+{\n  "track_id": "vad_implementation_20260102",\n  "type": "feature",\n  "status": "new",\n  "created_at": "2026-01-02T15:00:00Z",\n  "updated_at": "2026-01-02T15:00:00Z",\n  "description": "Implement a hybrid Energy/ZCR Voice Activity Detector to gate neural network inference."\n}
