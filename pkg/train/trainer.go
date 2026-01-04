@@ -6,6 +6,12 @@ import (
 	"github.com/vitalii/hotword/pkg/model"
 )
 
+// AugmentorTrainer is an interface for trainers that support dynamic augmentation.
+type AugmentorTrainer interface {
+	SetAugmentor(a *Augmentor)
+	Train(ds *Dataset, epochs int, featureExtractor func([]float32) *model.Tensor)
+}
+
 // Trainer manages the training process for a hotword model.
 type Trainer struct {
 	model        model.Model

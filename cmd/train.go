@@ -24,6 +24,7 @@ var trainAugProb float32
 var trainMaxNoise float32
 var trainMaxShift int
 var trainMaxGain float32
+var trainThreads int
 
 // NewTrainCmd creates a new train command
 func NewTrainCmd() *cobra.Command {
@@ -46,7 +47,9 @@ Augmentation options:
   --max-shift: Maximum random time shift in milliseconds.
   --max-gain: Maximum random gain/volume scaling (e.g. 0.2 for 0.8x-1.2x).
 
-If no option is specified, uses legacy mode (first 1 second only).`,
+Performance options:
+  --threads: Number of CPU threads to use for parallel training (sharded SGD).
+             Defaults to number of CPU cores. Set to 1 for sequential.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			data := viper.GetString("train.data")
 			out := viper.GetString("train.out")
@@ -55,6 +58,7 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 			stride := viper.GetInt("train.stride")
 			maxLen := viper.GetInt("train.max_len")
 			onset := viper.GetBool("train.onset")
+			threads := viper.GetInt("train.threads")
 
 			// Augmentation params
 			augProb := float32(viper.GetFloat64("train.augment_prob"))
@@ -142,7 +146,12 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 				return fmt.Errorf("failed to build model: %w", err)
 			}
 
-			trainer := train.NewTrainer(m, lr)
+			var t train.AugmentorTrainer
+			if threads > 1 || threads == 0 {
+				t = train.NewParallelTrainer(m, lr, threads)
+			} else {
+				t = train.NewTrainer(m, lr)
+			}
 
 			// Setup dynamic augmentor if needed
 			if augProb > 0 {
@@ -162,11 +171,11 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 					MaxShiftMs:    maxShift,
 					MaxGainScale:  maxGain,
 				}, noisePool)
-				trainer.SetAugmentor(aug)
+				t.SetAugmentor(aug)
 			}
 
 			cmd.Printf("Starting training for %d epochs (LR: %f)...\n", epochs, lr)
-			trainer.Train(ds, epochs, extractor)
+			t.Train(ds, epochs, extractor)
 
 			cmd.Printf("Saving model to %s...\n", out)
 			if err := model.SaveModel(out, m); err != nil {
@@ -189,6 +198,7 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 	cmd.Flags().Float32Var(&trainMaxNoise, "max-noise", 0.2, "Maximum noise ratio to mix into samples")
 	cmd.Flags().IntVar(&trainMaxShift, "max-shift", 100, "Maximum random time shift in milliseconds")
 	cmd.Flags().Float32Var(&trainMaxGain, "max-gain", 0.1, "Maximum random gain/volume scaling")
+	cmd.Flags().IntVar(&trainThreads, "threads", 0, "Number of CPU threads for parallel training (0 = use all cores)")
 
 	viper.BindPFlag("train.data", cmd.Flags().Lookup("data"))
 	viper.BindPFlag("train.out", cmd.Flags().Lookup("out"))
@@ -201,6 +211,7 @@ If no option is specified, uses legacy mode (first 1 second only).`,
 	viper.BindPFlag("train.max_noise", cmd.Flags().Lookup("max-noise"))
 	viper.BindPFlag("train.max_shift", cmd.Flags().Lookup("max-shift"))
 	viper.BindPFlag("train.max_gain", cmd.Flags().Lookup("max-gain"))
+	viper.BindPFlag("train.threads", cmd.Flags().Lookup("threads"))
 
 	return cmd
 }
