@@ -34,9 +34,16 @@ The application uses command-line subcommands. Examples below assume you have bu
 
 Organize your training data (16kHz mono WAV files) into two folders:
 ```
-data/
-  ├── hotword/    # WAV files containing the hotword
-  └── background/ # WAV files of silence, noise, or speech with NO hotword
+data/train/
+      ├── hotword/    # WAV files containing the hotword
+      └── background/ # WAV files of silence, noise, or speech with NO hotword
+```
+
+Organize your validation data (16kHz mono WAV files) into two folders:
+```
+data/validate/
+      ├── hotword/    # WAV files containing the hotword
+      └── background/ # WAV files of silence, noise, or speech with NO hotword
 ```
 
 ### 2. Train a Model
@@ -44,7 +51,7 @@ data/
 Train a new model using your dataset.
 
 ```bash
-./hotword train --data ./data --out my_model.bin --epochs 50
+./hotword train --data ./data/train --out my_model.bin --epochs 50
 ```
 
 **Common Options:**
@@ -58,7 +65,7 @@ Train a new model using your dataset.
 Check the accuracy of your model against a dataset.
 
 ```bash
-./hotword verify --model my_model.bin --data ./data_test
+./hotword verify --model my_model.bin --data ./data/validate
 ```
 
 ### 4. Real-time Listening
