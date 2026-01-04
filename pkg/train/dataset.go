@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 
 	"github.com/vitalii/hotword/pkg/audio"
 )
@@ -155,26 +157,27 @@ func CropToOnset(audioData []float32, sampleRate, targetLen int, threshold float
 // It also generates synthetic noise samples to improve robustness.
 func LoadDataset(hotwordDir, backgroundDir string) (*Dataset, error) {
 	ds := &Dataset{}
-
 	const targetLength = 16000 // 1 second at 16kHz
 
+	pb := NewProgressBar(0, "Loading Dataset")
+
 	// Load hotwords
-	hotSamples, err := loadFromDir(hotwordDir, true, targetLength)
+	hotSamples, err := loadFromDir(hotwordDir, true, targetLength, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hotwords: %w", err)
 	}
 	ds.Samples = append(ds.Samples, hotSamples...)
 
 	// Load background
-	bgSamples, err := loadFromDir(backgroundDir, false, targetLength)
+	bgSamples, err := loadFromDir(backgroundDir, false, targetLength, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load background: %w", err)
 	}
 	ds.Samples = append(ds.Samples, bgSamples...)
 
-	// Generate synthetic noise samples to teach model to reject random noise
-	// This is critical because real microphone input contains various noise types
-	// Generate as many noise samples as hotwords for balanced training
+	pb.Finish()
+
+	// Generate synthetic noise samples...
 	numNoiseSamples := len(hotSamples)
 	if numNoiseSamples < 100 {
 		numNoiseSamples = 100
@@ -191,20 +194,23 @@ func LoadDataset(hotwordDir, backgroundDir string) (*Dataset, error) {
 // stride is the step size between windows (e.g., 8000 for 50% overlap).
 func LoadDatasetWindowed(hotwordDir, backgroundDir string, windowLen, stride int) (*Dataset, error) {
 	ds := &Dataset{}
+	pb := NewProgressBar(0, "Loading Dataset (Windowed)")
 
 	// Load hotwords with windowing
-	hotSamples, err := loadFromDirWindowed(hotwordDir, true, windowLen, stride)
+	hotSamples, err := loadFromDirWindowed(hotwordDir, true, windowLen, stride, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hotwords: %w", err)
 	}
 	ds.Samples = append(ds.Samples, hotSamples...)
 
 	// Load background with windowing
-	bgSamples, err := loadFromDirWindowed(backgroundDir, false, windowLen, stride)
+	bgSamples, err := loadFromDirWindowed(backgroundDir, false, windowLen, stride, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load background: %w", err)
 	}
 	ds.Samples = append(ds.Samples, bgSamples...)
+
+	pb.Finish()
 
 	// Generate synthetic noise samples
 	numNoiseSamples := len(hotSamples)
@@ -218,25 +224,25 @@ func LoadDatasetWindowed(hotwordDir, backgroundDir string, windowLen, stride int
 }
 
 // LoadDatasetWithPadding loads WAV files with variable length support.
-// Audio shorter than maxLen is padded with zeros at the end.
-// Audio longer than maxLen is truncated from the END (preserving the beginning).
-// Each sample records its ActualLen for masking during training/inference.
 func LoadDatasetWithPadding(hotwordDir, backgroundDir string, maxLen int) (*Dataset, error) {
 	ds := &Dataset{}
+	pb := NewProgressBar(0, "Loading Dataset (Padded)")
 
 	// Load hotwords with padding
-	hotSamples, err := loadFromDirPadded(hotwordDir, true, maxLen)
+	hotSamples, err := loadFromDirPadded(hotwordDir, true, maxLen, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hotwords: %w", err)
 	}
 	ds.Samples = append(ds.Samples, hotSamples...)
 
 	// Load background with padding
-	bgSamples, err := loadFromDirPadded(backgroundDir, false, maxLen)
+	bgSamples, err := loadFromDirPadded(backgroundDir, false, maxLen, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load background: %w", err)
 	}
 	ds.Samples = append(ds.Samples, bgSamples...)
+
+	pb.Finish()
 
 	// Generate synthetic noise samples
 	numNoiseSamples := len(hotSamples)
@@ -250,26 +256,25 @@ func LoadDatasetWithPadding(hotwordDir, backgroundDir string, maxLen int) (*Data
 }
 
 // LoadDatasetWithOnset loads WAV files using onset detection.
-// For both hotword and background files: detects where audio activity begins and extracts from there.
-// This helps with long files containing silence at the beginning.
-// threshold is the onset detection threshold (0.0-1.0), lower = more sensitive.
-// sampleRate is needed for onset detection window sizing.
 func LoadDatasetWithOnset(hotwordDir, backgroundDir string, targetLen, sampleRate int, threshold float32) (*Dataset, error) {
 	ds := &Dataset{}
+	pb := NewProgressBar(0, "Loading Dataset (Onset)")
 
 	// Load hotwords with onset detection
-	hotSamples, err := loadFromDirWithOnset(hotwordDir, true, targetLen, sampleRate, threshold)
+	hotSamples, err := loadFromDirWithOnset(hotwordDir, true, targetLen, sampleRate, threshold, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hotwords: %w", err)
 	}
 	ds.Samples = append(ds.Samples, hotSamples...)
 
 	// Load background with onset detection (finds activity in long silent files)
-	bgSamples, err := loadFromDirWithOnset(backgroundDir, false, targetLen, sampleRate, threshold)
+	bgSamples, err := loadFromDirWithOnset(backgroundDir, false, targetLen, sampleRate, threshold, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load background: %w", err)
 	}
 	ds.Samples = append(ds.Samples, bgSamples...)
+
+	pb.Finish()
 
 	// Generate synthetic noise samples
 	numNoiseSamples := len(hotSamples)
@@ -283,24 +288,25 @@ func LoadDatasetWithOnset(hotwordDir, backgroundDir string, targetLen, sampleRat
 }
 
 // LoadDatasetWithOnsetAndStride combines onset detection with window extraction.
-// For both hotword and background files: finds onset, then extracts multiple overlapping windows.
-// This maximizes training data while ensuring all windows contain actual audio activity.
 func LoadDatasetWithOnsetAndStride(hotwordDir, backgroundDir string, windowLen, stride, sampleRate int, threshold float32) (*Dataset, error) {
 	ds := &Dataset{}
+	pb := NewProgressBar(0, "Loading Dataset (Onset+Stride)")
 
 	// Load hotwords with onset detection + windowing
-	hotSamples, err := loadFromDirWithOnsetAndStride(hotwordDir, true, windowLen, stride, sampleRate, threshold)
+	hotSamples, err := loadFromDirWithOnsetAndStride(hotwordDir, true, windowLen, stride, sampleRate, threshold, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hotwords: %w", err)
 	}
 	ds.Samples = append(ds.Samples, hotSamples...)
 
 	// Load background with onset detection + windowing
-	bgSamples, err := loadFromDirWithOnsetAndStride(backgroundDir, false, windowLen, stride, sampleRate, threshold)
+	bgSamples, err := loadFromDirWithOnsetAndStride(backgroundDir, false, windowLen, stride, sampleRate, threshold, pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load background: %w", err)
 	}
 	ds.Samples = append(ds.Samples, bgSamples...)
+
+	pb.Finish()
 
 	// Generate synthetic noise samples
 	numNoiseSamples := len(hotSamples)
@@ -379,201 +385,235 @@ func generateNoiseSamples(count, length int) []Sample {
 	return samples
 }
 
-func loadFromDir(dir string, isHotword bool, targetLength int) ([]Sample, error) {
+type fileProcessor func(path string) ([]Sample, error)
+
+func parallelLoadFromDir(dir string, isHotword bool, proc fileProcessor, pb *ProgressBar) ([]Sample, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	var samples []Sample
+	var wavFiles []string
 	for _, f := range files {
 		if filepath.Ext(f.Name()) == ".wav" {
-			path := filepath.Join(dir, f.Name())
-			file, err := os.Open(path)
-			if err != nil {
-				return nil, err
-			}
-
-			audioData, _, err := audio.LoadWAV(file)
-			file.Close()
-			if err != nil {
-				continue
-			}
-
-			// Normalize length
-			normalized := make([]float32, targetLength)
-			copy(normalized, audioData)
-
-			actualLen := len(audioData)
-			if actualLen > targetLength {
-				actualLen = targetLength
-			}
-
-			samples = append(samples, Sample{
-				Audio:     normalized,
-				IsHotword: isHotword,
-				ActualLen: actualLen,
-			})
+			wavFiles = append(wavFiles, filepath.Join(dir, f.Name()))
 		}
 	}
-	return samples, nil
+
+	if len(wavFiles) == 0 {
+		return nil, nil
+	}
+
+	numFiles := len(wavFiles)
+	if pb != nil {
+		// Update total if it was initialized with 0
+		if pb.Total == 0 {
+			pb.Total = numFiles
+		} else {
+			// Add to existing total (for hotword + background)
+			pb.Total += numFiles
+		}
+	}
+
+	numWorkers := runtime.NumCPU()
+	if numWorkers > numFiles {
+		numWorkers = numFiles
+	}
+
+	pathsChan := make(chan string, numFiles)
+	resultsChan := make(chan []Sample, numFiles)
+	var wg sync.WaitGroup
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range pathsChan {
+				samples, err := proc(path)
+				if err != nil {
+					fmt.Printf("\nError loading %s: %v\n", path, err)
+					resultsChan <- nil
+					continue
+				}
+				resultsChan <- samples
+			}
+		}()
+	}
+
+	for _, path := range wavFiles {
+		pathsChan <- path
+	}
+	close(pathsChan)
+
+	// Result collector
+	var allSamples []Sample
+	done := make(chan bool)
+	go func() {
+		count := 0
+		for samples := range resultsChan {
+			if samples != nil {
+				allSamples = append(allSamples, samples...)
+			}
+			count++
+			if pb != nil {
+				pb.Update(pb.Current + 1)
+			}
+			if count == numFiles {
+				break
+			}
+		}
+		done <- true
+	}()
+
+	wg.Wait()
+	<-done
+
+	return allSamples, nil
+}
+
+func loadFromDir(dir string, isHotword bool, targetLength int, pb *ProgressBar) ([]Sample, error) {
+	proc := func(path string) ([]Sample, error) {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+
+		audioData, _, err := audio.LoadWAV(file)
+		if err != nil {
+			return nil, err
+		}
+
+		// Normalize length
+		normalized := make([]float32, targetLength)
+		copy(normalized, audioData)
+
+		actualLen := len(audioData)
+		if actualLen > targetLength {
+			actualLen = targetLength
+		}
+
+		return []Sample{{
+			Audio:     normalized,
+			IsHotword: isHotword,
+			ActualLen: actualLen,
+		}}, nil
+	}
+	return parallelLoadFromDir(dir, isHotword, proc, pb)
 }
 
 // loadFromDirWindowed loads audio files and extracts multiple overlapping windows.
-func loadFromDirWindowed(dir string, isHotword bool, windowLen, stride int) ([]Sample, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var samples []Sample
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".wav" {
-			path := filepath.Join(dir, f.Name())
-			file, err := os.Open(path)
-			if err != nil {
-				return nil, err
-			}
-
-			audioData, _, err := audio.LoadWAV(file)
-			file.Close()
-			if err != nil {
-				continue
-			}
-
-			// Extract overlapping windows
-			windows := extractWindows(audioData, windowLen, stride)
-			for _, window := range windows {
-				samples = append(samples, Sample{
-					Audio:     window,
-					IsHotword: isHotword,
-					ActualLen: windowLen, // Windows are always full length
-				})
-			}
+func loadFromDirWindowed(dir string, isHotword bool, windowLen, stride int, pb *ProgressBar) ([]Sample, error) {
+	proc := func(path string) ([]Sample, error) {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
 		}
+		defer file.Close()
+
+		audioData, _, err := audio.LoadWAV(file)
+		if err != nil {
+			return nil, err
+		}
+
+		windows := extractWindows(audioData, windowLen, stride)
+		var samples []Sample
+		for _, window := range windows {
+			samples = append(samples, Sample{
+				Audio:     window,
+				IsHotword: isHotword,
+				ActualLen: windowLen,
+			})
+		}
+		return samples, nil
 	}
-	return samples, nil
+	return parallelLoadFromDir(dir, isHotword, proc, pb)
 }
 
 // loadFromDirPadded loads audio files with variable length support.
-// Shorter audio is padded with zeros, longer audio is truncated from the end.
-func loadFromDirPadded(dir string, isHotword bool, maxLen int) ([]Sample, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var samples []Sample
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".wav" {
-			path := filepath.Join(dir, f.Name())
-			file, err := os.Open(path)
-			if err != nil {
-				return nil, err
-			}
-
-			audioData, _, err := audio.LoadWAV(file)
-			file.Close()
-			if err != nil {
-				continue
-			}
-
-			// Determine actual length (before padding/truncation)
-			actualLen := len(audioData)
-			if actualLen > maxLen {
-				actualLen = maxLen
-			}
-
-			// Create padded/truncated buffer
-			padded := make([]float32, maxLen)
-			copy(padded, audioData) // Truncates naturally if audioData > maxLen
-
-			samples = append(samples, Sample{
-				Audio:     padded,
-				IsHotword: isHotword,
-				ActualLen: actualLen, // Records original length for masking
-			})
+func loadFromDirPadded(dir string, isHotword bool, maxLen int, pb *ProgressBar) ([]Sample, error) {
+	proc := func(path string) ([]Sample, error) {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
 		}
+		defer file.Close()
+
+		audioData, _, err := audio.LoadWAV(file)
+		if err != nil {
+			return nil, err
+		}
+
+		actualLen := len(audioData)
+		if actualLen > maxLen {
+			actualLen = maxLen
+		}
+
+		padded := make([]float32, maxLen)
+		copy(padded, audioData)
+
+		return []Sample{{
+			Audio:     padded,
+			IsHotword: isHotword,
+			ActualLen: actualLen,
+		}}, nil
 	}
-	return samples, nil
+	return parallelLoadFromDir(dir, isHotword, proc, pb)
 }
 
 // loadFromDirWithOnset loads audio files using onset detection.
-// Detects where audio activity begins and extracts targetLen samples from that point.
-func loadFromDirWithOnset(dir string, isHotword bool, targetLen, sampleRate int, threshold float32) ([]Sample, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var samples []Sample
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".wav" {
-			path := filepath.Join(dir, f.Name())
-			file, err := os.Open(path)
-			if err != nil {
-				return nil, err
-			}
-
-			audioData, _, err := audio.LoadWAV(file)
-			file.Close()
-			if err != nil {
-				continue
-			}
-
-			// Use onset detection to crop the audio
-			cropped := CropToOnset(audioData, sampleRate, targetLen, threshold)
-
-			samples = append(samples, Sample{
-				Audio:     cropped,
-				IsHotword: isHotword,
-				ActualLen: targetLen,
-			})
+func loadFromDirWithOnset(dir string, isHotword bool, targetLen, sampleRate int, threshold float32, pb *ProgressBar) ([]Sample, error) {
+	proc := func(path string) ([]Sample, error) {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
 		}
+		defer file.Close()
+
+		audioData, _, err := audio.LoadWAV(file)
+		if err != nil {
+			return nil, err
+		}
+
+		cropped := CropToOnset(audioData, sampleRate, targetLen, threshold)
+
+		return []Sample{{
+			Audio:     cropped,
+			IsHotword: isHotword,
+			ActualLen: targetLen,
+		}}, nil
 	}
-	return samples, nil
+	return parallelLoadFromDir(dir, isHotword, proc, pb)
 }
 
 // loadFromDirWithOnsetAndStride combines onset detection with window extraction.
-// First finds onset in each file, then extracts multiple overlapping windows from that point.
-func loadFromDirWithOnsetAndStride(dir string, isHotword bool, windowLen, stride, sampleRate int, threshold float32) ([]Sample, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var samples []Sample
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".wav" {
-			path := filepath.Join(dir, f.Name())
-			file, err := os.Open(path)
-			if err != nil {
-				return nil, err
-			}
-
-			audioData, _, err := audio.LoadWAV(file)
-			file.Close()
-			if err != nil {
-				continue
-			}
-
-			// Find onset with 50ms lead time
-			leadTimeSamples := sampleRate / 20 // 50ms
-			onsetIdx := findOnset(audioData, sampleRate, threshold, leadTimeSamples)
-
-			// Extract audio from onset to end
-			audioFromOnset := audioData[onsetIdx:]
-
-			// Extract overlapping windows from the onset point
-			windows := extractWindows(audioFromOnset, windowLen, stride)
-			for _, window := range windows {
-				samples = append(samples, Sample{
-					Audio:     window,
-					IsHotword: isHotword,
-					ActualLen: windowLen,
-				})
-			}
+func loadFromDirWithOnsetAndStride(dir string, isHotword bool, windowLen, stride, sampleRate int, threshold float32, pb *ProgressBar) ([]Sample, error) {
+	proc := func(path string) ([]Sample, error) {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
 		}
+		defer file.Close()
+
+		audioData, _, err := audio.LoadWAV(file)
+		if err != nil {
+			return nil, err
+		}
+
+		leadTimeSamples := sampleRate / 20
+		onsetIdx := findOnset(audioData, sampleRate, threshold, leadTimeSamples)
+		audioFromOnset := audioData[onsetIdx:]
+
+		windows := extractWindows(audioFromOnset, windowLen, stride)
+		var samples []Sample
+		for _, window := range windows {
+			samples = append(samples, Sample{
+				Audio:     window,
+				IsHotword: isHotword,
+				ActualLen: windowLen,
+			})
+		}
+		return samples, nil
 	}
-	return samples, nil
+	return parallelLoadFromDir(dir, isHotword, proc, pb)
 }
