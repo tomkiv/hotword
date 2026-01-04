@@ -21,7 +21,7 @@ A minimalist hotword detection system written in Go, specifically designed for h
 ### Build
 
 ```bash
-git clone <repo_url>
+git clone https://github.com/tomkiv/hotword.git
 cd hotword
 go build -o hotword .
 ```
