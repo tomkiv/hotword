@@ -1,3 +1,8 @@
 hotword
 model.bin
 .DS_Store
+data/train/background
+data/train/hotword
+data/validate/background
+data/validate/hotword
+data/custom

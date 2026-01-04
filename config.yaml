@@ -1,7 +1,7 @@
 train:
   epochs: 50
   lr: 0.01
-  data: data_test
+  data: data/train
   out: model.bin
 
 listen:
@@ -16,7 +16,7 @@ listen:
 
 verify:
   model: model.bin
-  data: data_test
+  data: data/validate
 
 model:
   layers:
