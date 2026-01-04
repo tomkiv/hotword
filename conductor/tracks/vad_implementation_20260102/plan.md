@@ -17,9 +17,9 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Engine Integration' (Protocol in workflow.md) (a8a961d)
 
 ## Phase 3: Configuration and CLI
-- [~] Task: Expose VAD parameters via Viper and CLI
+- [x] Task: Expose VAD parameters via Viper and CLI (7950773)
   - [ ] Add `vad_energy_threshold` and `vad_zcr_threshold` to `config.yaml`
   - [ ] Update `cmd/listen.go` to support VAD configuration flags
-- [ ] Task: Implement VAD status in CLI output
+- [x] Task: Implement VAD status in CLI output (7950773)
   - [ ] Add a `[VAD: INACTIVE]` indicator to the listen command status line
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Configuration and CLI' (Protocol in workflow.md)
