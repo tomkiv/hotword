@@ -34,6 +34,7 @@ func NewPredictCmd() *cobra.Command {
 			}
 
 			// 1. Load Model
+			cmd.Printf("Loading model %s...\n", modelPath)
 			m, err := model.LoadModel(modelPath)
 			if err != nil {
 				return fmt.Errorf("failed to load model: %w", err)

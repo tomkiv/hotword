@@ -151,8 +151,8 @@ func (l *LSTMLayer) forwardInternal(input *Tensor, initialH, initialC []float32)
 			newH[j] = oG[j] * tanh32(newC[j])
 		}
 
-		l.iSeq[t], l.fSeq[t], l.oSeq[t], l.gSeq[t] = &Tensor{Data: iG}, &Tensor{Data: fG}, &Tensor{Data: oG}, &Tensor{Data: gG}
-		l.cSeq[t+1], l.hSeq[t+1] = &Tensor{Data: newC}, &Tensor{Data: newH}
+		l.iSeq[t], l.fSeq[t], l.oSeq[t], l.gSeq[t] = &Tensor{Data: iG, Shape: []int{l.HiddenSize}}, &Tensor{Data: fG, Shape: []int{l.HiddenSize}}, &Tensor{Data: oG, Shape: []int{l.HiddenSize}}, &Tensor{Data: gG, Shape: []int{l.HiddenSize}}
+		l.cSeq[t+1], l.hSeq[t+1] = &Tensor{Data: newC, Shape: []int{l.HiddenSize}}, &Tensor{Data: newH, Shape: []int{l.HiddenSize}}
 	}
 	return l.hSeq[seqLen]
 }
@@ -176,38 +176,49 @@ func (l *LSTMLayer) Backward(input, gradOutput *Tensor) (*Tensor, *Tensor, []flo
 		cCurr := l.cSeq[t+1].Data
 		i, f, o, g := l.iSeq[t].Data, l.fSeq[t].Data, l.oSeq[t].Data, l.gSeq[t].Data
 
+		// Store per-timestep gate deltas for BPTT
+		diArr := make([]float32, l.HiddenSize)
+		dfArr := make([]float32, l.HiddenSize)
+		doArr := make([]float32, l.HiddenSize)
+		dgArr := make([]float32, l.HiddenSize)
+		dcCurrArr := make([]float32, l.HiddenSize)
+
 		for j := 0; j < l.HiddenSize; j++ {
 			tc := tanh32(cCurr[j])
-			do := dh[j] * tc * o[j] * (1 - o[j])
+			doVal := dh[j] * tc * o[j] * (1 - o[j])
 			dcCurr := dc[j] + dh[j]*o[j]*(1-tc*tc)
-			df := dcCurr * cPrev[j] * f[j] * (1 - f[j])
-			di := dcCurr * g[j] * i[j] * (1 - i[j])
-			dg := dcCurr * i[j] * (1 - g[j]*g[j])
+			dfVal := dcCurr * cPrev[j] * f[j] * (1 - f[j])
+			diVal := dcCurr * g[j] * i[j] * (1 - i[j])
+			dgVal := dcCurr * i[j] * (1 - g[j]*g[j])
 
-			dBi[j], dBf[j], dBo[j], dBg[j] = dBi[j]+di, dBf[j]+df, dBo[j]+do, dBg[j]+dg
+			diArr[j], dfArr[j], doArr[j], dgArr[j] = diVal, dfVal, doVal, dgVal
+			dcCurrArr[j] = dcCurr
+
+			dBi[j], dBf[j], dBo[j], dBg[j] = dBi[j]+diVal, dBf[j]+dfVal, dBo[j]+doVal, dBg[j]+dgVal
 			for k := 0; k < inputDim; k++ {
 				xv := xt[k]
-				dWi.Data[j*inputDim+k] += di * xv
-				dWf.Data[j*inputDim+k] += df * xv
-				dWo.Data[j*inputDim+k] += do * xv
-				dWg.Data[j*inputDim+k] += dg * xv
-				dInput.Data[t*inputDim+k] += di*l.Wi.Data[j*inputDim+k] + df*l.Wf.Data[j*inputDim+k] + do*l.Wo.Data[j*inputDim+k] + dg*l.Wg.Data[j*inputDim+k]
+				dWi.Data[j*inputDim+k] += diVal * xv
+				dWf.Data[j*inputDim+k] += dfVal * xv
+				dWo.Data[j*inputDim+k] += doVal * xv
+				dWg.Data[j*inputDim+k] += dgVal * xv
+				dInput.Data[t*inputDim+k] += diVal*l.Wi.Data[j*inputDim+k] + dfVal*l.Wf.Data[j*inputDim+k] + doVal*l.Wo.Data[j*inputDim+k] + dgVal*l.Wg.Data[j*inputDim+k]
 			}
 			for k := 0; k < l.HiddenSize; k++ {
 				hv := hPrev[k]
-				dUi.Data[j*l.HiddenSize+k] += di * hv
-				dUf.Data[j*l.HiddenSize+k] += df * hv
-				dUo.Data[j*l.HiddenSize+k] += do * hv
-				dUg.Data[j*l.HiddenSize+k] += dg * hv
+				dUi.Data[j*l.HiddenSize+k] += diVal * hv
+				dUf.Data[j*l.HiddenSize+k] += dfVal * hv
+				dUo.Data[j*l.HiddenSize+k] += doVal * hv
+				dUg.Data[j*l.HiddenSize+k] += dgVal * hv
 			}
 		}
 
+		// Use per-timestep gate deltas (not accumulated bias gradients) for BPTT
 		newDh, newDc := make([]float32, l.HiddenSize), make([]float32, l.HiddenSize)
 		for k := 0; k < l.HiddenSize; k++ {
 			for j := 0; j < l.HiddenSize; j++ {
-				newDh[k] += dBi[j]*l.Ui.Data[j*l.HiddenSize+k] + dBf[j]*l.Uf.Data[j*l.HiddenSize+k] + dBo[j]*l.Uo.Data[j*l.HiddenSize+k] + dBg[j]*l.Ug.Data[j*l.HiddenSize+k]
+				newDh[k] += diArr[j]*l.Ui.Data[j*l.HiddenSize+k] + dfArr[j]*l.Uf.Data[j*l.HiddenSize+k] + doArr[j]*l.Uo.Data[j*l.HiddenSize+k] + dgArr[j]*l.Ug.Data[j*l.HiddenSize+k]
 			}
-			newDc[k] = dc[k] * f[k]
+			newDc[k] = dcCurrArr[k] * f[k]
 		}
 		dh, dc = newDh, newDc
 	}

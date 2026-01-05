@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"math"
 	"sync"
 )
@@ -286,12 +287,12 @@ func MaxPool2D(input *Tensor, kernelSize, stride int) *Tensor {
 			for i := 0; i < outHeight; i++ {
 				for j := 0; j < outWidth; j++ {
 					var maxVal float32 = -3.402823466e+38 // float32 min
-					
+
 					for ki := 0; ki < kernelSize; ki++ {
 						for kj := 0; kj < kernelSize; kj++ {
 							ii := i*stride + ki
 							jj := j*stride + kj
-							
+
 							val := input.Get([]int{c, ii, jj})
 							if val > maxVal {
 								maxVal = val
@@ -339,6 +340,11 @@ func DenseBackward(input, weights *Tensor, bias []float32, gradOutput *Tensor) (
 
 	if actualInputSize != expectedInputSize {
 		panic("DenseBackward: input size mismatch")
+	}
+
+	gradOutputSize := len(gradOutput.Data)
+	if gradOutputSize != numOutputs {
+		panic(fmt.Sprintf("DenseBackward: gradOutput size mismatch. Expected %d, got %d", numOutputs, gradOutputSize))
 	}
 
 	gradInput := NewTensor(input.Shape)
@@ -486,7 +492,7 @@ func MaxPool2DBackward(input, gradOutput *Tensor, kernelSize, stride int) *Tenso
 						}
 					}
 				}
-				
+
 				flatIdx := gradInput.getIndex([]int{c, maxIdx[0], maxIdx[1]})
 				gradInput.Data[flatIdx] += gradOutput.Get([]int{c, i, j})
 			}

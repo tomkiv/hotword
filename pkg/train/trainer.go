@@ -44,7 +44,12 @@ func (t *Trainer) TrainStep(input *model.Tensor, target float32) float32 {
 		inputs[i+1] = layer.Forward(inputs[i])
 	}
 
-	prediction := inputs[len(inputs)-1].Data[0]
+	finalOutput := inputs[len(inputs)-1]
+	if len(finalOutput.Data) != 1 {
+		panic(fmt.Sprintf("Trainer: model output size mismatch. Expected 1 (binary classification), got %d. Multi-output models are not currently supported by Trainer.", len(finalOutput.Data)))
+	}
+
+	prediction := finalOutput.Data[0]
 	loss := model.BCELoss([]float32{prediction}, []float32{target})
 
 	// 2. Backward Pass
@@ -82,12 +87,12 @@ func (t *Trainer) TrainStep(input *model.Tensor, target float32) float32 {
 func (t *Trainer) Train(ds *Dataset, epochs int, featureExtractor func([]float32) *model.Tensor) {
 	for epoch := 1; epoch <= epochs; epoch++ {
 		var totalLoss float32
-		
+
 		pb := NewProgressBar(len(ds.Samples), fmt.Sprintf("Epoch %d/%d", epoch, epochs))
-		
+
 		for i, sample := range ds.Samples {
 			audioData := sample.Audio
-			
+
 			// Apply dynamic augmentation only to hotwords
 			if t.augmentor != nil && sample.IsHotword {
 				audioData = t.augmentor.Augment(audioData)
@@ -103,7 +108,7 @@ func (t *Trainer) Train(ds *Dataset, epochs int, featureExtractor func([]float32
 
 			loss := t.TrainStep(features, target)
 			totalLoss += loss
-			
+
 			pb.Update(i + 1)
 		}
 		pb.Finish()

@@ -8,3 +8,4 @@ data/validate/hotword
 data/custom
 .vscode/launch.json
 cmd/model.bin
+models
