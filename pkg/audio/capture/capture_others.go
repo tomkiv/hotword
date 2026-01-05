@@ -1,4 +1,4 @@
-//go:build !linux && !darwin
+//go:build !(cgo && linux) && !darwin
 
 package capture
 
